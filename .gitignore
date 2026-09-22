@@ -1,0 +1,10 @@
+node_modules/
+*.log
+data/
+.superpowers/
+
+# The database lives outside this folder, but guard against a local override
+# putting it here, because committing it would publish the Plex token.
+*.db
+*.db-wal
+*.db-shm

@@ -1,0 +1,6 @@
+# Store text with LF in the repository and check it out however this machine
+# wants it. Without this, Git warns on every file on a Windows checkout.
+* text=auto
+
+# Batch files must keep CRLF or the Windows shell mis-reads the last line.
+*.cmd text eol=crlf

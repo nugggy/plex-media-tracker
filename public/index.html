@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plex Media Tracker</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231b1714'/%3E%3Cpath d='M12 9l10 7-10 7z' fill='%23c97b3c'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <svg class="disc" viewBox="0 0 40 40" aria-hidden="true">
+          <rect width="40" height="40" rx="9" fill="#1b1714" />
+          <rect x="0.5" y="0.5" width="39" height="39" rx="8.5" fill="none" stroke="#3a322b" />
+          <path d="M15 11l13 9-13 9z" fill="#c97b3c" />
+        </svg>
+        <div>
+          <h1>Plex Media Tracker</h1>
+          <p class="tagline">New releases and watchlist arrivals from your Plex server</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button
+          id="scan-btn"
+          class="btn btn-primary"
+          title="Reads your Plex library and watchlist, checks episode schedules and film dates, then asks MusicBrainz about any artist not checked recently."
+        >
+          Check for updates
+        </button>
+        <button id="stop-btn" class="btn btn-quiet" hidden>Stop</button>
+      </div>
+    </header>
+
+    <div id="progress" class="progress" hidden>
+      <div class="progress-head">
+        <span id="progress-message">Working</span>
+        <span id="progress-count" class="muted"></span>
+      </div>
+      <div class="bar"><div id="progress-fill" class="bar-fill"></div></div>
+      <div id="progress-current" class="muted small"></div>
+    </div>
+
+    <div id="banner" class="banner" hidden></div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="out" role="tab">
+        Out now <span class="pill" id="count-out">0</span>
+      </button>
+      <button class="tab" data-tab="upcoming" role="tab">
+        Coming soon <span class="pill" id="count-upcoming">0</span>
+      </button>
+      <button class="tab" data-tab="watchlist" role="tab">
+        Watchlist <span class="pill" id="count-watchlist">0</span>
+      </button>
+      <button class="tab" data-tab="artists" role="tab">
+        Artists <span class="pill" id="count-artists">0</span>
+      </button>
+      <button class="tab" data-tab="search" role="tab">Search</button>
+      <button class="tab" data-tab="library" role="tab">Library</button>
+      <button class="tab" data-tab="suggestions" role="tab">Suggestions</button>
+      <button class="tab" data-tab="trending" role="tab">Trending</button>
+      <button class="tab" data-tab="settings" role="tab">Settings</button>
+    </nav>
+
+    <main>
+      <!-- Out now ------------------------------------------------------- -->
+      <section id="panel-out" class="panel">
+        <div class="panel-head">
+          <p class="muted">
+            Out recently and not on your server yet. Shows appear when a new episode airs.
+          </p>
+          <label class="check">
+            <input type="checkbox" id="show-dismissed" /> Show dismissed
+          </label>
+        </div>
+        <div class="filters" id="filters-out"></div>
+        <div id="out-list" class="cards"></div>
+      </section>
+
+      <!-- Coming soon --------------------------------------------------- -->
+      <section id="panel-upcoming" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">Dated in the future. Announced records and films turn up here first.</p>
+        </div>
+        <div class="filters" id="filters-upcoming"></div>
+        <div id="upcoming-list" class="cards"></div>
+      </section>
+
+      <!-- Watchlist ----------------------------------------------------- -->
+      <section id="panel-watchlist" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">Your Plex watchlist. Removing here removes it from Plex too.</p>
+        </div>
+
+        <details class="accordion" id="gaps-card" hidden>
+          <summary class="accordion-head">
+            <span class="accordion-title" id="gaps-title">
+              Shows on your server you are not tracking
+            </span>
+          </summary>
+          <div class="accordion-body">
+            <div class="chart-head">
+              <p class="muted small">
+                Adding one to your watchlist starts episode tracking, so you find out when the next
+                episode is due.
+              </p>
+              <input
+                type="search"
+                id="gaps-filter"
+                class="input search"
+                placeholder="Filter"
+                autocomplete="off"
+              />
+            </div>
+            <div id="gaps-list" class="artists"></div>
+          </div>
+        </details>
+        <div class="filters">
+          <input
+            type="search"
+            id="wl-filter"
+            class="input search"
+            placeholder="Search your watchlist"
+            autocomplete="off"
+          />
+          <div class="chips" id="wl-chips" role="group" aria-label="Type">
+            <button type="button" class="chip is-on" data-wl="movie">Films</button>
+            <button type="button" class="chip is-on" data-wl="show">Shows</button>
+          </div>
+          <select class="input" id="wl-sort" aria-label="Sort watchlist">
+            <option value="title">Title A to Z</option>
+            <option value="added">Recently added</option>
+            <option value="date">Release date</option>
+          </select>
+          <button type="button" class="btn btn-refresh" data-refresh="watchlist">
+            Refresh watchlist
+          </button>
+        </div>
+        <div class="filter-summary">
+          <span id="wl-summary"></span>
+          <button type="button" class="btn btn-tiny" id="wl-undo" hidden>Undo last removal</button>
+        </div>
+        <div id="wl-list" class="artists"></div>
+      </section>
+
+      <!-- Artists ------------------------------------------------------- -->
+      <section id="panel-artists" class="panel" hidden>
+        <div class="filters">
+          <input
+            type="search"
+            id="artist-filter"
+            class="input search"
+            placeholder="Search artists"
+            autocomplete="off"
+          />
+          <select class="input" id="artist-status" aria-label="Filter by status">
+            <option value="all">All artists</option>
+            <option value="attention">Needs attention</option>
+            <option value="matched">Matched</option>
+            <option value="muted">Muted</option>
+          </select>
+          <select class="input" id="artist-sort" aria-label="Sort artists">
+            <option value="name">Name</option>
+            <option value="albums">Most albums in Plex</option>
+            <option value="checked">Least recently checked</option>
+          </select>
+          <button type="button" class="btn btn-refresh" data-refresh="music">
+            Check artists
+          </button>
+        </div>
+        <div class="filter-summary">
+          <span id="artist-summary"></span>
+          <button type="button" class="btn btn-tiny" id="artist-clear" hidden>Clear</button>
+        </div>
+        <div id="artist-list" class="artists"></div>
+      </section>
+
+      <!-- Search -------------------------------------------------------- -->
+      <section id="panel-search" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            Search Plex and MusicBrainz, then add a film or show to your Plex watchlist, or start
+            watching an artist you do not own yet.
+          </p>
+        </div>
+        <div class="filters">
+          <input
+            type="search"
+            id="search-box"
+            class="input search"
+            placeholder="Film, show or artist"
+            autocomplete="off"
+          />
+          <div class="chips" id="search-chips" role="group" aria-label="What to search">
+            <button type="button" class="chip is-on" data-sk="movie">Films</button>
+            <button type="button" class="chip is-on" data-sk="show">Shows</button>
+            <button type="button" class="chip is-on" data-sk="artist">Artists</button>
+          </div>
+          <button type="button" class="btn btn-primary" id="search-go">Search</button>
+        </div>
+        <div class="filter-summary"><span id="search-summary"></span></div>
+        <div id="search-results" class="cards"></div>
+      </section>
+
+      <!-- Library ------------------------------------------------------- -->
+      <section id="panel-library" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            Housekeeping on what is already on your server. Nothing here is fetched from the
+            internet; it all comes from the last check.
+          </p>
+        </div>
+        <div class="filters">
+          <button type="button" class="btn btn-refresh" data-refresh="library">
+            Re-read my library
+          </button>
+          <span class="muted small">
+            Reads your server over the network. Takes about fifteen seconds.
+          </span>
+        </div>
+        <div class="tiles" id="lib-tiles"></div>
+
+        <section class="chart-card">
+          <div class="chart-head">
+            <div>
+              <h2>Missing episodes</h2>
+              <p class="muted small">
+                A gap is an episode missing between two you hold, which is certain. An aired hole is
+                an episode the show has broadcast that is not on the server. A season still airing is
+                never reported as broken.
+              </p>
+            </div>
+            <input type="search" id="miss-filter" class="input search" placeholder="Filter shows" />
+          </div>
+          <div id="missing-list" class="artists"></div>
+        </section>
+
+        <section class="chart-card">
+          <div class="chart-head">
+            <div>
+              <h2>Duplicate files</h2>
+              <p class="muted small">More than one file for the same thing.</p>
+            </div>
+          </div>
+          <div id="dupes-list" class="artists"></div>
+        </section>
+
+        <section class="chart-card">
+          <div class="chart-head">
+            <div>
+              <h2>Worth upgrading</h2>
+              <p class="muted small" id="upgrade-sub">Films held below 1080p.</p>
+            </div>
+          </div>
+          <div id="upgrades-list" class="artists"></div>
+        </section>
+      </section>
+
+      <!-- Suggestions --------------------------------------------------- -->
+      <section id="panel-suggestions" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            Built from what you already have. Artists come from ListenBrainz, films and shows from
+            your own Plex server.
+          </p>
+          <button type="button" class="btn" id="suggest-btn">Build suggestions</button>
+        </div>
+        <div class="filters">
+          <input
+            type="search"
+            id="sg-filter"
+            class="input search"
+            placeholder="Search suggestions"
+            autocomplete="off"
+          />
+          <div class="chips" id="sg-chips" role="group" aria-label="Type">
+            <button type="button" class="chip is-on" data-sg="artist">Artists</button>
+            <button type="button" class="chip is-on" data-sg="movie">Films</button>
+            <button type="button" class="chip is-on" data-sg="show">Shows</button>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="sg-previous" /> Include previous years
+          </label>
+        </div>
+        <div class="filter-summary"><span id="sg-summary"></span></div>
+        <div id="sg-list" class="cards"></div>
+      </section>
+
+      <!-- Trending -------------------------------------------------------- -->
+      <section id="panel-trending" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            What is popular right now. Films and shows from TMDB, country music from the US
+            Apple chart.
+          </p>
+          <button type="button" class="btn" id="trending-btn">Build trending</button>
+        </div>
+        <div class="filters">
+          <input
+            type="search"
+            id="tr-filter"
+            class="input search"
+            placeholder="Search trending"
+            autocomplete="off"
+          />
+          <div class="chips" id="tr-chips" role="group" aria-label="Type">
+            <button type="button" class="chip is-on" data-tr="movie">Films</button>
+            <button type="button" class="chip is-on" data-tr="show">Shows</button>
+            <button type="button" class="chip is-on" data-tr="album">Albums</button>
+            <button type="button" class="chip" data-tr="single">Singles</button>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="tr-catalogue" /> Catalogue
+          </label>
+        </div>
+        <div class="filter-summary"><span id="tr-summary"></span></div>
+        <div id="tr-list" class="cards"></div>
+      </section>
+
+      <!-- Settings ------------------------------------------------------ -->
+      <section id="panel-settings" class="panel" hidden>
+        <form id="settings-form" class="form">
+          <fieldset>
+            <legend>Plex server</legend>
+
+            <label class="field">
+              <span>Server URL</span>
+              <input
+                class="input"
+                type="text"
+                name="plex_url"
+                id="plex_url"
+                placeholder="http://192.168.1.10:32400"
+                spellcheck="false"
+              />
+              <small class="muted"
+                >Usually <code>http://localhost:32400</code> if Plex runs on this PC.</small
+              >
+            </label>
+
+            <label class="field">
+              <span>Plex token</span>
+              <input
+                class="input"
+                type="password"
+                name="plex_token"
+                id="plex_token"
+                placeholder="X-Plex-Token"
+                spellcheck="false"
+              />
+              <small class="muted">
+                In Plex, open any album, choose Get Info, then View XML. The token is the
+                <code>X-Plex-Token</code> value at the end of the address bar.
+              </small>
+            </label>
+
+            <div class="row">
+              <button type="button" id="test-btn" class="btn">Test connection</button>
+              <span id="test-result" class="muted small"></span>
+            </div>
+
+            <label class="field">
+              <span>Music library</span>
+              <select class="input" name="plex_section" id="plex_section">
+                <option value="">Test the connection to load libraries</option>
+              </select>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Watchlist</legend>
+            <label class="check">
+              <input type="checkbox" id="watchlist_enabled" /> Track films and shows from my Plex
+              watchlist
+            </label>
+            <p class="muted small">
+              Uses the same token against plex.tv. Removing an item in the app removes it from Plex,
+              and removing it in Plex removes it here.
+            </p>
+            <label class="check">
+              <input type="checkbox" id="sync_on_start" /> Sync automatically when the app starts
+            </label>
+            <p class="muted small">
+              On start, the app quietly redoes the fast half of Check for updates: your library,
+              watchlist, episode schedules and film dates. It skips the slow MusicBrainz step, so
+              the dashboard is current within a couple of minutes without a long wait.
+            </p>
+            <div class="row">
+              <button type="button" id="wl-test-btn" class="btn">Check watchlist access</button>
+              <span id="wl-test-result" class="muted small"></span>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Film release dates</legend>
+            <label class="field">
+              <span>TMDB API key (optional)</span>
+              <input
+                class="input"
+                type="password"
+                id="tmdb_api_key"
+                placeholder="Leave blank to use the single Plex date"
+                spellcheck="false"
+              />
+              <small class="muted">
+                Plex gives one date per film, normally the cinema release. A free key from
+                <code>themoviedb.org</code> lets the app tell cinema and digital dates apart, so
+                Out now only lists films you can actually watch at home. Without it, films are
+                treated as cinema releases and hidden unless you tick Cinema.
+              </small>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>What to watch</legend>
+            <div class="row wrap">
+              <label class="check"><input type="checkbox" id="include_album" /> Albums</label>
+              <label class="check"><input type="checkbox" id="include_ep" /> EPs</label>
+              <label class="check"><input type="checkbox" id="include_single" /> Singles</label>
+            </div>
+            <p class="muted small">
+              Live records, compilations, remix collections, soundtracks and reissues are always
+              excluded.
+            </p>
+
+            <label class="field narrow">
+              <span>Treat a release as recent for</span>
+              <span class="suffix">
+                <input class="input" type="number" min="7" max="1095" id="recent_days" />
+                <em>days</em>
+              </span>
+            </label>
+
+            <label class="field narrow">
+              <span>Re-check each artist every</span>
+              <span class="suffix">
+                <input class="input" type="number" min="1" max="90" id="stale_days" />
+                <em>days</em>
+              </span>
+            </label>
+          </fieldset>
+
+          <div class="row">
+            <button type="submit" class="btn btn-primary">Save settings</button>
+            <span id="save-result" class="muted small"></span>
+          </div>
+        </form>
+
+        <section class="history">
+          <h2>Recent scans</h2>
+          <div id="scan-history"></div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
