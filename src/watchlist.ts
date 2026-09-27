@@ -19,6 +19,7 @@ import { fetchLibraryGuids, listVideoSections, fetchAlbums } from './plex.ts';
 import { syncEpisodes, syncLocalEpisodes, type EpisodeSyncResult } from './episodes.ts';
 import { syncFilmDates } from './tmdb.ts';
 import { fetchMachineId } from './library.ts';
+import { ensurePlexUrl, withPlex } from './plexconnect.ts';
 
 /**
  * A sync that wants to push more removals than this has almost certainly gone
@@ -140,11 +141,13 @@ export async function syncWatchlist(
   // Which of these are already on the server.
   onProgress?.('Checking what is already in your library');
   try {
-    const sections = await listVideoSections(settings.plex_url, token);
-    if (sections.length > 0) {
-      const guids = await fetchLibraryGuids(settings.plex_url, token, sections);
-      wl.replaceLibraryGuids(guids);
-    }
+    await withPlex(async (url) => {
+      const sections = await listVideoSections(url, token);
+      if (sections.length > 0) {
+        const guids = await fetchLibraryGuids(url, token, sections);
+        wl.replaceLibraryGuids(guids);
+      }
+    });
   } catch {
     // The local server being unreachable must not fail the whole sync; the
     // in_library flags simply stay as they were.
@@ -264,10 +267,25 @@ export async function refreshLibraryState(
   };
 
   if (want.has('holdings')) {
+    // In automatic mode, work out where the server is from here before
+    // anything talks to it. Manual mode keeps the saved address.
+    onProgress?.('Finding your Plex server');
+    try {
+      const relayNote = await ensurePlexUrl();
+      if (relayNote) {
+        onProgress?.(relayNote);
+        result.message += `${relayNote} `;
+      }
+    } catch (err) {
+      result.message += `${(err as Error).message} `;
+    }
+
     onProgress?.('Re-reading your Plex music library');
     try {
       if (settings.plex_section) {
-        const albums = await fetchAlbums(settings.plex_url, settings.plex_token, settings.plex_section);
+        const albums = await withPlex((url) =>
+          fetchAlbums(url, settings.plex_token, settings.plex_section),
+        );
         store.replacePlexAlbums(albums);
         result.owned = store.refreshOwnedFlags();
       }
@@ -277,7 +295,7 @@ export async function refreshLibraryState(
 
     // The server id is what makes a deep link back into Plex possible.
     try {
-      const machine = await fetchMachineId(settings.plex_url, settings.plex_token);
+      const machine = await fetchMachineId(store.getSetting('plex_url'), settings.plex_token);
       if (machine) store.setSetting('plex_machine_id', machine);
     } catch {
       // Without it, links are simply not offered.
@@ -285,20 +303,22 @@ export async function refreshLibraryState(
 
     onProgress?.('Checking films and shows already on the server');
     try {
-      const sections = await listVideoSections(settings.plex_url, settings.plex_token);
-      if (sections.length > 0) {
-        const guids = await fetchLibraryGuids(settings.plex_url, settings.plex_token, sections);
-        wl.replaceLibraryGuids(guids);
-      }
-      const showSections = sections.filter((x) => x.type === 'show').map((x) => x.key);
-      if (showSections.length > 0) {
-        result.heldEpisodes = await syncLocalEpisodes(
-          settings.plex_url,
-          settings.plex_token,
-          showSections,
-          onProgress,
-        );
-      }
+      await withPlex(async (url) => {
+        const sections = await listVideoSections(url, settings.plex_token);
+        if (sections.length > 0) {
+          const guids = await fetchLibraryGuids(url, settings.plex_token, sections);
+          wl.replaceLibraryGuids(guids);
+        }
+        const showSections = sections.filter((x) => x.type === 'show').map((x) => x.key);
+        if (showSections.length > 0) {
+          result.heldEpisodes = await syncLocalEpisodes(
+            url,
+            settings.plex_token,
+            showSections,
+            onProgress,
+          );
+        }
+      });
     } catch (err) {
       result.message += `Film and TV check failed: ${(err as Error).message}. `;
     }

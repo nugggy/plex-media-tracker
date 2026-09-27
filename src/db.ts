@@ -189,6 +189,10 @@ db.exec(SCHEMA);
 const DEFAULTS: Record<string, string> = {
   plex_url: '',
   plex_token: '',
+  /** 'manual' uses plex_url as typed; 'auto' finds the server via plex.tv each check. */
+  plex_connection: 'manual',
+  /** local, remote or relay: how the last automatic lookup reached the server. */
+  plex_connection_kind: '',
   plex_section: '',
   plex_section_title: '',
   recent_days: '180',

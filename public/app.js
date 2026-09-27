@@ -1623,6 +1623,17 @@ async function loadSettings() {
     const { settings, token_set } = await api('/api/settings');
     $('#plex_url').value = settings.plex_url;
     $('#plex_token').value = token_set ? '********' : '';
+    const auto = settings.plex_connection === 'auto';
+    $('#plex_connection_auto').checked = auto;
+    $('#plex_connection_manual').checked = !auto;
+    const server = $('#plex_server');
+    if (settings.plex_machine_id && server.options.length <= 1) {
+      server.replaceChildren(
+        el('option', { value: settings.plex_machine_id, selected: true }, 'Current server'),
+      );
+    }
+    showCurrentAddress(settings.plex_url, settings.plex_connection_kind);
+    showConnectionFields();
     $('#recent_days').value = settings.recent_days;
     $('#stale_days').value = settings.stale_days;
     $('#include_album').checked = settings.include_album === '1';
@@ -1647,16 +1658,72 @@ async function loadSettings() {
   }
 }
 
+function connectionMode() {
+  return $('#plex_connection_auto').checked ? 'auto' : 'manual';
+}
+
+function showConnectionFields() {
+  const auto = connectionMode() === 'auto';
+  $('#plex-auto-fields').hidden = !auto;
+  $('#plex-manual-fields').hidden = auto;
+}
+
+const KIND_LABELS = {
+  local: 'on your home network',
+  remote: 'over the internet',
+  relay: 'through the Plex relay',
+};
+
+function showCurrentAddress(url, kind) {
+  $('#plex-current-address').textContent =
+    url && KIND_LABELS[kind] ? `Last reached at ${url}, ${KIND_LABELS[kind]}.` : '';
+}
+
+for (const radio of document.querySelectorAll('input[name="plex_connection"]')) {
+  radio.addEventListener('change', showConnectionFields);
+}
+
+$('#find-servers-btn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $('#find-servers-result').textContent = 'Asking plex.tv…';
+  try {
+    const { servers } = await post('/api/plex/servers', {
+      plex_token: $('#plex_token').value.trim(),
+    });
+    const select = $('#plex_server');
+    const current = select.value;
+    if (servers.length === 0) {
+      $('#find-servers-result').textContent = 'No servers you own were found on this account.';
+      return;
+    }
+    select.replaceChildren(...servers.map((s) => el('option', { value: s.machine_id }, s.name)));
+    select.value = servers.some((s) => s.machine_id === current) ? current : servers[0].machine_id;
+    $('#find-servers-result').textContent =
+      `Found ${servers.length} ${servers.length === 1 ? 'server' : 'servers'}. Now test the connection.`;
+  } catch (err) {
+    $('#find-servers-result').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 $('#test-btn').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
   $('#test-result').textContent = 'Testing…';
   try {
     const result = await post('/api/plex/test', {
+      plex_connection: connectionMode(),
+      plex_machine_id: $('#plex_server').value,
       plex_url: $('#plex_url').value.trim(),
       plex_token: $('#plex_token').value.trim(),
     });
     $('#test-result').textContent = result.message;
+    if (result.plex_url) {
+      $('#plex_url').value = result.plex_url;
+      showCurrentAddress(result.plex_url, result.kind);
+    }
     if (result.sections?.length) {
       const select = $('#plex_section');
       const current = select.value;
@@ -1691,10 +1758,14 @@ $('#settings-form').addEventListener('submit', async (e) => {
   const select = $('#plex_section');
   try {
     await post('/api/settings', {
+      plex_connection: connectionMode(),
       plex_url: $('#plex_url').value.trim(),
       plex_token: $('#plex_token').value.trim(),
       plex_section: select.value,
       plex_section_title: select.selectedOptions[0]?.textContent ?? '',
+      ...(connectionMode() === 'auto' && $('#plex_server').value
+        ? { plex_machine_id: $('#plex_server').value }
+        : {}),
       recent_days: $('#recent_days').value,
       stale_days: $('#stale_days').value,
       include_album: $('#include_album').checked ? '1' : '0',

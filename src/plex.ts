@@ -24,6 +24,9 @@ export interface PlexAlbum {
 
 export class PlexError extends Error {}
 
+/** Nothing answered at the address, as opposed to Plex answering with an error. */
+export class PlexUnreachable extends PlexError {}
+
 export interface LibraryEntry {
   guid: string;
   rating_key: string | null;
@@ -90,8 +93,8 @@ async function plexGet(
     const cause = timedOut
       ? 'It did not answer in time.'
       : 'Nothing answered at that address.';
-    throw new PlexError(
-      `Could not reach Plex at ${cleanBaseUrl(baseUrl)}. ${cause} Check the address and port, and that the server is switched on and on the same network.`,
+    throw new PlexUnreachable(
+      `Could not reach Plex at ${cleanBaseUrl(baseUrl)}. ${cause} Check the address and port, and that the server is switched on. Away from home, choose Find my server automatically in Settings.`,
     );
   }
 

@@ -5,6 +5,7 @@ import { browseReleaseGroups, searchArtist, type MbReleaseGroup } from './musicb
 import { normaliseArtistName, normaliseTitle, titleOverlap } from './matching.ts';
 import { daysAgo, nowIso } from './dates.ts';
 import { refreshLibraryState, type RefreshPart } from './watchlist.ts';
+import { ensurePlexUrl, withPlex } from './plexconnect.ts';
 
 export type Phase =
   | 'idle'
@@ -108,9 +109,16 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     }
 
     /* Phase 1: what does Plex hold ------------------------------------- */
-    const { plex_url: url, plex_token: token, plex_section: section } = settings;
-    const artists = await fetchArtists(url, token, section);
-    const albums = await fetchAlbums(url, token, section);
+    // The quick refresh has already found the server; without it, find it here.
+    if (skipQuickRefresh) {
+      const relayNote = await ensurePlexUrl();
+      if (relayNote) progress.message = relayNote;
+    }
+    const { plex_token: token, plex_section: section } = settings;
+    const { artists, albums } = await withPlex(async (url) => ({
+      artists: await fetchArtists(url, token, section),
+      albums: await fetchAlbums(url, token, section),
+    }));
 
     // How many albums Plex holds per artist, used for ordering and for the
     // disambiguation tie-break later on.

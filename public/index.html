@@ -333,21 +333,6 @@
             <legend>Plex server</legend>
 
             <label class="field">
-              <span>Server URL</span>
-              <input
-                class="input"
-                type="text"
-                name="plex_url"
-                id="plex_url"
-                placeholder="http://192.168.1.10:32400"
-                spellcheck="false"
-              />
-              <small class="muted"
-                >Usually <code>http://localhost:32400</code> if Plex runs on this PC.</small
-              >
-            </label>
-
-            <label class="field">
               <span>Plex token</span>
               <input
                 class="input"
@@ -362,6 +347,54 @@
                 <code>X-Plex-Token</code> value at the end of the address bar.
               </small>
             </label>
+
+            <div class="field">
+              <span>How to reach the server</span>
+              <label class="check">
+                <input type="radio" name="plex_connection" id="plex_connection_auto" value="auto" />
+                Find my server automatically
+              </label>
+              <label class="check">
+                <input type="radio" name="plex_connection" id="plex_connection_manual" value="manual" />
+                Enter an address
+              </label>
+              <small class="muted">
+                Automatic asks plex.tv where your server is each time the app checks, so it works at
+                home and away. Away from home it needs Remote Access switched on in Plex.
+              </small>
+            </div>
+
+            <div id="plex-auto-fields">
+              <label class="field">
+                <span>Server</span>
+                <select class="input" id="plex_server">
+                  <option value="">Press Find my servers</option>
+                </select>
+              </label>
+              <div class="row">
+                <button type="button" id="find-servers-btn" class="btn">Find my servers</button>
+                <span id="find-servers-result" class="muted small"></span>
+              </div>
+              <p class="muted small" id="plex-current-address"></p>
+            </div>
+
+            <div id="plex-manual-fields">
+              <label class="field">
+                <span>Server URL</span>
+                <input
+                  class="input"
+                  type="text"
+                  name="plex_url"
+                  id="plex_url"
+                  placeholder="http://192.168.1.10:32400"
+                  spellcheck="false"
+                />
+                <small class="muted"
+                  >Usually <code>http://localhost:32400</code> if Plex runs on this PC. This address
+                  only works on your home network.</small
+                >
+              </label>
+            </div>
 
             <div class="row">
               <button type="button" id="test-btn" class="btn">Test connection</button>

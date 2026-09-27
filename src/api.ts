@@ -3,6 +3,7 @@ import * as store from './db.ts';
 import * as wl from './watchlist-db.ts';
 import { getProgress, requestStop, runScan, runRefresh } from './scanner.ts';
 import { testConnection, thumbUrl } from './plex.ts';
+import { ensurePlexUrl, listServers, resolveServer } from './plexconnect.ts';
 import { posterUrl, verifyAccount } from './plexdiscover.ts';
 import { removeItem, restoreItem, type RefreshPart } from './watchlist.ts';
 import { isMbid } from './matching.ts';
@@ -49,6 +50,8 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 const SETTABLE = new Set([
   'plex_url',
   'plex_token',
+  'plex_connection',
+  'plex_machine_id',
   'plex_section',
   'plex_section_title',
   'recent_days',
@@ -72,14 +75,14 @@ export interface FeedItem {
   title: string;
   subtitle: string;
   date: string | null;
-  event: string | null;
-  thumb: string | null;
-  link: string | null;
   /**
    * The exact instant an episode lands, when one is known. Only episodes carry
    * it: a record or a film has a release date and no meaningful release time.
    */
   air_stamp?: string | null;
+  event: string | null;
+  thumb: string | null;
+  link: string | null;
   first_seen_at: string;
   dismissed: number;
   date_kind?: string | null;
@@ -121,10 +124,10 @@ function buildFeed(kind: 'out' | 'upcoming' | 'dismissed', recentDays: number): 
         title: e.title,
         subtitle: e.subtitle,
         date: e.date,
+        air_stamp: e.air_stamp,
         event: e.event,
         thumb: `/thumb?wl=${encodeURIComponent(e.show_key)}`,
         link: null,
-        air_stamp: e.air_stamp,
         first_seen_at: e.first_seen_at,
         dismissed: e.dismissed,
         group: e.show_key,
@@ -547,15 +550,60 @@ export async function handleApi(
         if ((key === 'plex_token' || key === 'tmdb_api_key') && value === '********') continue;
         store.setSetting(key, String(value));
       }
+      // Automatic mode has no typed address, so find one now. If the server
+      // cannot be reached this minute, the next check tries again.
+      if (store.getSetting('plex_connection') === 'auto') {
+        try {
+          await ensurePlexUrl();
+        } catch {
+          // Saved regardless; the Test connection button shows why.
+        }
+      }
       send(res, 200, { ok: true, configured: store.isConfigured() });
+      return true;
+    }
+
+    if (path === '/api/plex/servers' && req.method === 'POST') {
+      const body = await readJson(req);
+      const token = tokenFrom(body);
+      if (!token) return bad(res, 'Enter your Plex token first.');
+      try {
+        const servers = await listServers(token);
+        send(res, 200, { servers: servers.map((s) => ({ machine_id: s.machineId, name: s.name })) });
+      } catch (err) {
+        return bad(res, (err as Error).message);
+      }
       return true;
     }
 
     if (path === '/api/plex/test' && req.method === 'POST') {
       const body = await readJson(req);
+      const token = tokenFrom(body);
+      if (body.plex_connection === 'auto') {
+        const machineId = String(body.plex_machine_id ?? '');
+        if (!machineId || !token) return bad(res, 'Pick a server and enter a token first.');
+        let found;
+        try {
+          found = await resolveServer(token, machineId);
+        } catch (err) {
+          send(res, 200, { ok: false, message: (err as Error).message, sections: [] });
+          return true;
+        }
+        const result = await testConnection(found.url, token);
+        const how = {
+          local: 'on your home network',
+          remote: 'over the internet',
+          relay: 'through the Plex relay, which is slow',
+        }[found.kind];
+        send(res, 200, {
+          ...result,
+          message: result.ok ? `${result.message} Reached ${how}.` : result.message,
+          plex_url: found.url,
+          kind: found.kind,
+        });
+        return true;
+      }
       const plexUrl = String(body.plex_url ?? store.getSetting('plex_url'));
-      const rawToken = String(body.plex_token ?? '');
-      const token = !rawToken || rawToken === '********' ? store.getSetting('plex_token') : rawToken;
       if (!plexUrl || !token) return bad(res, 'Both a server URL and a token are needed.');
       send(res, 200, await testConnection(plexUrl, token));
       return true;
@@ -591,6 +639,12 @@ let suggestionsProgress = '';
 
 let trendingRunning = false;
 let trendingProgress = '';
+
+/** The token from a settings form, or the saved one when the form holds the mask. */
+function tokenFrom(body: Record<string, unknown>): string {
+  const raw = String(body.plex_token ?? '');
+  return !raw || raw === '********' ? store.getSetting('plex_token') : raw;
+}
 
 function bad(res: ServerResponse, message: string): boolean {
   send(res, 400, { error: message });
