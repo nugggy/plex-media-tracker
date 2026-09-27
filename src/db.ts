@@ -1,5 +1,6 @@
 import { openDatabase } from './sqlite-driver.ts';
 import type { Db } from './sqlite.ts';
+import { PLATFORM } from './config.ts';
 import { today, daysAgo, nowIso } from './dates.ts';
 
 export type MbStatus = 'pending' | 'resolved' | 'ambiguous' | 'not_found' | 'manual' | 'error';
@@ -188,7 +189,8 @@ const DEFAULTS: Record<string, string> = {
   plex_url: '',
   plex_token: '',
   /** 'manual' uses plex_url as typed; 'auto' finds the server via plex.tv each check. */
-  plex_connection: 'manual',
+  // A typed LAN address is no use to a phone away from home.
+  plex_connection: PLATFORM === 'mobile' ? 'auto' : 'manual',
   /** local, remote or relay: how the last automatic lookup reached the server. */
   plex_connection_kind: '',
   plex_section: '',

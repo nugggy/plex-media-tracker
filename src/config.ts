@@ -2,8 +2,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, existsSync, renameSync } from 'node:fs';
 
+import { APP_VERSION } from './version.ts';
+
+export { APP_VERSION };
 export const APP_NAME = 'Plex Media Tracker';
-export const APP_VERSION = '1.1.0';
+/** The phone build swaps this file for mobile/config.ts, where this is 'mobile'. */
+export const PLATFORM: 'desktop' | 'mobile' = 'desktop';
 
 /** The folder this app used before it was renamed. Its data is carried over. */
 const LEGACY_FOLDER = 'WaxWrangler';
