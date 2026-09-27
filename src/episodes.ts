@@ -12,6 +12,27 @@
 import { db } from './db.ts';
 import * as store from './db.ts';
 import { today, daysAgo, nowIso } from './dates.ts';
+import {
+  resolveAir,
+  showAirTimes,
+  epKey,
+  parseGuids,
+  type ShowAirTimes,
+  type AirSource,
+} from './airtimes.ts';
+
+/* ------------------------------------------------------------- migrations */
+
+for (const sql of [
+  'ALTER TABLE episodes ADD COLUMN air_stamp TEXT',
+  "ALTER TABLE episodes ADD COLUMN air_source TEXT NOT NULL DEFAULT 'plex'",
+]) {
+  try {
+    db.exec(sql);
+  } catch {
+    // Column already present.
+  }
+}
 
 const DISCOVER = 'https://discover.provider.plex.tv';
 const GAP_MS = 200;
@@ -25,7 +46,11 @@ export interface EpisodeRow {
   season: number | null;
   episode: number | null;
   title: string | null;
+  /** The Sydney calendar date. See src/airtimes.ts for how it is arrived at. */
   air_date: string | null;
+  /** The instant behind that date, when a real one was available. */
+  air_stamp: string | null;
+  air_source: AirSource;
   thumb: string | null;
   first_seen_at: string;
   dismissed: number;
@@ -68,6 +93,8 @@ function upsert(row: {
   episode: number | null;
   title: string | null;
   air_date: string | null;
+  air_stamp: string | null;
+  air_source: AirSource;
   thumb: string | null;
 }): boolean {
   const existing = db.prepare('SELECT rating_key FROM episodes WHERE rating_key = ?').get(
@@ -75,7 +102,8 @@ function upsert(row: {
   );
   if (existing) {
     db.prepare(
-      `UPDATE episodes SET show_title = ?, season = ?, episode = ?, title = ?, air_date = ?, thumb = ?
+      `UPDATE episodes SET show_title = ?, season = ?, episode = ?, title = ?, air_date = ?,
+              air_stamp = ?, air_source = ?, thumb = ?
        WHERE rating_key = ?`,
     ).run(
       row.show_title,
@@ -83,6 +111,8 @@ function upsert(row: {
       row.episode,
       row.title,
       row.air_date,
+      row.air_stamp,
+      row.air_source,
       row.thumb,
       row.rating_key,
     );
@@ -90,8 +120,9 @@ function upsert(row: {
   }
   db.prepare(
     `INSERT INTO episodes
-       (rating_key, show_key, show_title, season, episode, title, air_date, thumb, first_seen_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (rating_key, show_key, show_title, season, episode, title, air_date, air_stamp,
+        air_source, thumb, first_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     row.rating_key,
     row.show_key,
@@ -100,10 +131,85 @@ function upsert(row: {
     row.episode,
     row.title,
     row.air_date,
+    row.air_stamp,
+    row.air_source,
     row.thumb,
     nowIso(),
   );
   return true;
+}
+
+/* --------------------------------------------------- real air times */
+
+/**
+ * How long "TVMaze does not carry this show" stands before asking again.
+ * TVMaze does add shows, so the answer is not permanent, but it changes slowly
+ * enough that asking on every refresh would be waste.
+ */
+const ABSENT_RECHECK_DAYS = 30;
+
+/** A show's external ids, which Plex only returns on the show itself. */
+async function showGuids(token: string, ratingKey: string): Promise<Record<string, string>> {
+  const res = await fetch(`${DISCOVER}/library/metadata/${ratingKey}`, {
+    headers: {
+      Accept: 'application/json',
+      'X-Plex-Token': token,
+      'X-Plex-Product': 'Plex Media Tracker',
+      'X-Plex-Client-Identifier': 'plex-media-tracker',
+    },
+    signal: AbortSignal.timeout(25_000),
+  });
+  if (!res.ok) throw new Error(`plex.tv returned HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    MediaContainer?: { Metadata?: { Guid?: { id?: string }[] }[] };
+  };
+  return parseGuids(data.MediaContainer?.Metadata?.[0]?.Guid);
+}
+
+function remember(showKey: string, times: ShowAirTimes): void {
+  db.prepare(
+    `INSERT INTO show_air_sources (show_key, tvmaze_id, state, checked_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(show_key) DO UPDATE SET
+       tvmaze_id = excluded.tvmaze_id, state = excluded.state, checked_at = excluded.checked_at`,
+  ).run(showKey, times.tvmazeId, times.lookup, nowIso());
+}
+
+/**
+ * Air stamps for one show, going through the cache.
+ *
+ * A show already matched costs one TVMaze request and no Plex request at all,
+ * because its TVMaze id is remembered. Only a show seen for the first time,
+ * or one whose absence has gone stale, pays for the id lookup.
+ */
+async function airTimesFor(token: string, showKey: string): Promise<ShowAirTimes> {
+  const empty = new Map<string, string>();
+  try {
+    const cached = db
+      .prepare('SELECT tvmaze_id, state, checked_at FROM show_air_sources WHERE show_key = ?')
+      .get(showKey) as { tvmaze_id: number | null; state: string; checked_at: string } | undefined;
+
+    if (cached?.state === 'matched' && cached.tvmaze_id !== null) {
+      return await showAirTimes({}, cached.tvmaze_id);
+    }
+    if (cached?.state === 'absent') {
+      const age = Date.now() - new Date(cached.checked_at).getTime();
+      if (age < ABSENT_RECHECK_DAYS * 86_400_000) {
+        return { lookup: 'absent', tvmazeId: null, stamps: empty };
+      }
+    }
+
+    const ids = await showGuids(token, showKey);
+    await sleep(GAP_MS);
+    const times = await showAirTimes(ids);
+    // An unreachable TVMaze is not an answer, so it is not worth remembering.
+    if (times.lookup !== 'unknown') remember(showKey, times);
+    return times;
+  } catch {
+    // Plex or TVMaze out of reach. Plex's own dates stand rather than being
+    // shifted on no evidence.
+    return { lookup: 'unknown', tvmazeId: null, stamps: empty };
+  }
 }
 
 export interface EpisodeSyncResult {
@@ -111,6 +217,8 @@ export interface EpisodeSyncResult {
   episodes: number;
   added: number;
   failed: number;
+  /** Episodes whose Sydney date came from a real air time rather than a guess. */
+  timed: number;
 }
 
 /**
@@ -121,7 +229,7 @@ export async function syncEpisodes(
   onProgress?: (m: string) => void,
 ): Promise<EpisodeSyncResult> {
   const token = store.getSetting('plex_token');
-  const result: EpisodeSyncResult = { shows: 0, episodes: 0, added: 0, failed: 0 };
+  const result: EpisodeSyncResult = { shows: 0, episodes: 0, added: 0, failed: 0, timed: 0 };
   if (!token) return result;
 
   const shows = db
@@ -144,6 +252,9 @@ export async function syncEpisodes(
       const show = shows[i]!;
       onProgress?.(`Episode schedules, ${Math.min(next, shows.length)} of ${shows.length}: ${show.title}`);
       try {
+        const air = await airTimesFor(token, show.rating_key);
+        await sleep(GAP_MS);
+
         const seasons = (await children(token, show.rating_key)).filter(
           (s) => typeof s.index === 'number' && s.index > 0,
         );
@@ -156,20 +267,33 @@ export async function syncEpisodes(
           await sleep(GAP_MS);
           for (const ep of eps) {
             if (!ep.ratingKey) continue;
+            const seasonNo =
+              typeof ep.parentIndex === 'number' ? ep.parentIndex : (season.index ?? null);
+            const episodeNo = typeof ep.index === 'number' ? ep.index : null;
+
+            // Plex's date is the show's own country. What Sydney gets, and
+            // when, is worked out in src/airtimes.ts.
+            const plexDate = /^\d{4}-\d{2}-\d{2}$/.test(ep.originallyAvailableAt ?? '')
+              ? ep.originallyAvailableAt!
+              : null;
+            const key = epKey(seasonNo, episodeNo);
+            const when = resolveAir(plexDate, key ? air.stamps.get(key) : undefined, air.lookup);
+
             const isNew = upsert({
               rating_key: String(ep.ratingKey),
               show_key: show.rating_key,
               show_title: show.title,
-              season: typeof ep.parentIndex === 'number' ? ep.parentIndex : (season.index ?? null),
-              episode: typeof ep.index === 'number' ? ep.index : null,
+              season: seasonNo,
+              episode: episodeNo,
               title: ep.title && ep.title !== 'TBA' ? ep.title : null,
-              air_date: /^\d{4}-\d{2}-\d{2}$/.test(ep.originallyAvailableAt ?? '')
-                ? ep.originallyAvailableAt!
-                : null,
+              air_date: when.air_date,
+              air_stamp: when.air_stamp,
+              air_source: when.air_source,
               thumb: ep.thumb ?? null,
             });
             result.episodes += 1;
             if (isNew) result.added += 1;
+            if (when.air_source === 'tvmaze') result.timed += 1;
           }
         }
         result.shows += 1;
@@ -185,6 +309,10 @@ export async function syncEpisodes(
     `DELETE FROM episodes WHERE show_key NOT IN
        (SELECT rating_key FROM watchlist_items WHERE state = 'listed')`,
   );
+  db.exec(
+    `DELETE FROM show_air_sources WHERE show_key NOT IN
+       (SELECT rating_key FROM watchlist_items WHERE state = 'listed')`,
+  );
   return result;
 }
 
@@ -196,6 +324,12 @@ export interface EpisodeFeedRow {
   title: string;
   subtitle: string;
   date: string | null;
+  /**
+   * The exact instant it lands, when a real one is known. The date above is
+   * this stamp read in Sydney, so a row carrying one can be shown to the
+   * minute and a row without one only ever to the day.
+   */
+  air_stamp: string | null;
   event: string;
   show_key: string;
   first_seen_at: string;
@@ -340,6 +474,7 @@ export function episodeFeed(
     title: r.show_title,
     subtitle: label(r),
     date: r.air_date,
+    air_stamp: r.air_source === 'tvmaze' ? r.air_stamp : null,
     event: episodeEvent(r.season, r.episode, shapes.get(r.show_key)),
     show_key: r.show_key,
     first_seen_at: r.first_seen_at,

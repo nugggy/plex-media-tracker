@@ -1,15 +1,72 @@
+/*
+ * Every colour the dashboard uses is named here and nowhere else, so the whole
+ * palette can be retuned, or a second theme added, without hunting through the
+ * rules below for stray hex values.
+ */
+
 :root {
+  /* Surfaces, from the page backdrop up to a hovered control. */
   --bg: #26211a;
   --surface: #322b23;
   --surface-2: #3d352b;
+  --surface-3: #494036;
+  --header-top: #322b23;
+  --well: rgba(0, 0, 0, 0.35);
+
+  /* Borders. The strong tone is for a hovered or armed edge. */
   --line: #4a4036;
+  --line-strong: #5b5046;
+
+  /* Text. */
   --text: #e9e1d7;
   --muted: #b3a699;
+
+  /* The accent, and the near-black that stays legible on top of it. */
   --accent: #c97b3c;
+  --accent-hover: #d98a48;
   --accent-soft: #4c3722;
+  --accent-line: #5c4225;
+  --accent-line-strong: #6b4a29;
+  --on-accent: #1a1209;
+
+  /* Status, as text, and as the border of an Artists status pill. */
   --good: #7fa96b;
+  --good-line: #3d4d36;
   --warn: #d4a23c;
+  --warn-line: #52432a;
   --bad: #c4685e;
+  --bad-line: #53322e;
+
+  /* The two banner tones across the top of the page. */
+  --banner-ok-bg: #33432e;
+  --banner-ok-text: #d5ecc9;
+  --banner-bad-bg: #47332c;
+  --banner-bad-text: #f2d5cd;
+
+  /*
+   * A badge takes a background, a border and a text tone together, so they are
+   * grouped per badge rather than per role. A premiere borrows the held green,
+   * which is also the In Plex tick; a finale has its own.
+   */
+  --chip-held-bg: #2a4231;
+  --chip-held-line: #3c6b4b;
+  --chip-held-text: #7fd39b;
+  --chip-part-bg: #363b28;
+  --chip-part-line: #4d5630;
+  --chip-part-text: #bfcc7a;
+  --chip-digital-bg: #2c4133;
+  --chip-digital-line: #34543f;
+  --chip-digital-text: #8fd0a4;
+  --chip-cinema-bg: #413426;
+  --chip-cinema-line: #5a452a;
+  --chip-cinema-text: #d0aa6a;
+  --chip-event-bg: #2d3f47;
+  --chip-event-line: #33505c;
+  --chip-event-text: #8fc7dc;
+  --chip-finale-bg: #46342d;
+  --chip-finale-line: #6a463a;
+  --chip-finale-text: #e0a68f;
+
   --radius: 14px;
   --content: 1080px;
   --gutter: max(24px, calc((100% - var(--content)) / 2 + 24px));
@@ -63,7 +120,7 @@ code {
   gap: 16px;
   flex-wrap: wrap;
   padding: 18px var(--gutter);
-  background: linear-gradient(180deg, #322b23, var(--surface));
+  background: linear-gradient(180deg, var(--header-top), var(--surface));
   border-bottom: 1px solid var(--line);
 }
 
@@ -110,8 +167,8 @@ code {
     border-color 0.12s;
 }
 .btn:hover {
-  background: #494036;
-  border-color: #5b5046;
+  background: var(--surface-3);
+  border-color: var(--line-strong);
 }
 .btn:disabled {
   opacity: 0.5;
@@ -120,12 +177,12 @@ code {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #1a1209;
+  color: var(--on-accent);
   font-weight: 600;
 }
 .btn-primary:hover {
-  background: #d98a48;
-  border-color: #d98a48;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 .btn-quiet {
   background: transparent;
@@ -150,7 +207,7 @@ code {
 }
 .bar {
   height: 5px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--well);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -173,12 +230,12 @@ code {
   padding: 12px var(--gutter);
   font-size: 14px;
   border-bottom: 1px solid var(--line);
-  background: #47332c;
-  color: #f2d5cd;
+  background: var(--banner-bad-bg);
+  color: var(--banner-bad-text);
 }
 .banner.ok {
-  background: #33432e;
-  color: #d5ecc9;
+  background: var(--banner-ok-bg);
+  color: var(--banner-ok-text);
 }
 
 /* ----------------------------------------------------------------- tabs */
@@ -221,7 +278,7 @@ code {
 }
 .tab.is-active .pill {
   background: var(--accent);
-  color: #1a1209;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -279,11 +336,11 @@ main {
 }
 .chip:hover {
   color: var(--text);
-  border-color: #5b5046;
+  border-color: var(--line-strong);
 }
 .chip.is-on {
   background: var(--accent-soft);
-  border-color: #6b4a29;
+  border-color: var(--accent-line-strong);
   color: var(--accent);
   font-weight: 600;
 }
@@ -381,7 +438,7 @@ main {
 }
 .tag.new {
   background: var(--accent-soft);
-  border-color: #5c4225;
+  border-color: var(--accent-line);
   color: var(--accent);
   text-transform: none;
   font-weight: 600;
@@ -466,59 +523,65 @@ a.link:hover {
   max-width: 720px;
   border: 0;
   border-radius: 8px;
+  /* Black, not a surface tone: it is the letterboxing around the video. */
   background: #000;
   display: block;
 }
 
 .tag.held {
-  background: #2a4231;
-  border-color: #3c6b4b;
-  color: #7fd39b;
+  background: var(--chip-held-bg);
+  border-color: var(--chip-held-line);
+  color: var(--chip-held-text);
   text-transform: none;
   font-weight: 600;
 }
+/* Plain tag colours, but keeps "Plex" capitalised to match the held tag. */
+.tag.not-held {
+  color: var(--muted);
+  text-transform: none;
+}
 .tag.part-held {
-  background: #363b28;
-  border-color: #4d5630;
-  color: #bfcc7a;
+  background: var(--chip-part-bg);
+  border-color: var(--chip-part-line);
+  color: var(--chip-part-text);
   text-transform: none;
 }
 .tick {
-  color: #7fd39b;
+  color: var(--chip-held-text);
   font-weight: 700;
 }
 
 .tag.date-digital {
-  background: #2c4133;
-  border-color: #34543f;
-  color: #8fd0a4;
+  background: var(--chip-digital-bg);
+  border-color: var(--chip-digital-line);
+  color: var(--chip-digital-text);
   text-transform: none;
 }
 .tag.date-cinema {
-  background: #413426;
-  border-color: #5a452a;
-  color: #d0aa6a;
+  background: var(--chip-cinema-bg);
+  border-color: var(--chip-cinema-line);
+  color: var(--chip-cinema-text);
   text-transform: none;
 }
 
 .tag.event {
-  background: #2d3f47;
-  border-color: #33505c;
-  color: #8fc7dc;
+  background: var(--chip-event-bg);
+  border-color: var(--chip-event-line);
+  color: var(--chip-event-text);
   text-transform: none;
 }
 
 /* A premiere reads as a start, a finale as an end, so they take their own
    colours rather than sharing the plain event badge. */
 .tag.event.premiere {
-  background: #2a4231;
-  border-color: #3c6b4b;
-  color: #8fd3a6;
+  background: var(--chip-held-bg);
+  border-color: var(--chip-held-line);
+  color: var(--chip-held-text);
 }
 .tag.event.finale {
-  background: #46342d;
-  border-color: #6a463a;
-  color: #e0a68f;
+  background: var(--chip-finale-bg);
+  border-color: var(--chip-finale-line);
+  color: var(--chip-finale-text);
 }
 
 /* ------------------------------------------------------------- artists */
@@ -563,17 +626,17 @@ a.link:hover {
 .status-resolved,
 .status-manual {
   color: var(--good);
-  border-color: #3d4d36;
+  border-color: var(--good-line);
 }
 .status-ambiguous,
 .status-pending {
   color: var(--warn);
-  border-color: #52432a;
+  border-color: var(--warn-line);
 }
 .status-not_found,
 .status-error {
   color: var(--bad);
-  border-color: #53322e;
+  border-color: var(--bad-line);
 }
 
 .fix {

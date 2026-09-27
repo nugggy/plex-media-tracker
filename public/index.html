@@ -14,9 +14,9 @@
     <header class="topbar">
       <div class="brand">
         <svg class="disc" viewBox="0 0 40 40" aria-hidden="true">
-          <rect width="40" height="40" rx="9" fill="#1b1714" />
-          <rect x="0.5" y="0.5" width="39" height="39" rx="8.5" fill="none" stroke="#3a322b" />
-          <path d="M15 11l13 9-13 9z" fill="#c97b3c" />
+          <rect width="40" height="40" rx="9" fill="var(--bg)" />
+          <rect x="0.5" y="0.5" width="39" height="39" rx="8.5" fill="none" stroke="var(--line)" />
+          <path d="M15 11l13 9-13 9z" fill="var(--accent)" />
         </svg>
         <div>
           <h1>Plex Media Tracker</h1>
@@ -313,6 +313,11 @@
             <button type="button" class="chip is-on" data-tr="album">Albums</button>
             <button type="button" class="chip" data-tr="single">Singles</button>
           </div>
+          <select class="input" id="tr-held" aria-label="Filter by Plex">
+            <option value="all">In Plex or not</option>
+            <option value="held">Only in Plex</option>
+            <option value="missing">Not in Plex</option>
+          </select>
           <label class="check">
             <input type="checkbox" id="tr-catalogue" /> Catalogue
           </label>

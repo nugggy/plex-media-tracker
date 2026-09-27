@@ -12,6 +12,8 @@ import {
   plural,
   formatDate,
   relativeDays,
+  formatWhen,
+  relativeWhen,
   filtersActive,
   applyFilters,
   groupEpisodes,
@@ -61,7 +63,7 @@ const state = {
   trendingHasKey: true,
   // Singles are off by default: the brief for the chart build treats them as
   // noise until asked for, so the tab opens the same way.
-  trFilters: { q: '', kinds: new Set(['movie', 'show', 'album']), catalogue: false },
+  trFilters: { q: '', kinds: new Set(['movie', 'show', 'album']), catalogue: false, held: 'all' },
   searchKinds: new Set(['movie', 'show', 'artist']),
   searchHits: [],
   searchNotes: [],
@@ -580,7 +582,11 @@ function itemCard(r, isNew, dismissed) {
               ep.subtitle,
               NOTABLE_EVENTS.includes(ep.event) ? [' ', eventTag(ep.event)] : null,
             ),
-            el('span', { class: 'muted' }, `${formatDate(ep.date)} · ${relativeDays(ep.date)}`),
+            el(
+              'span',
+              { class: 'muted' },
+              `${formatWhen(ep.date, ep.air_stamp)} · ${relativeWhen(ep.date, ep.air_stamp)}`,
+            ),
             confirmingButton('Dismiss', 'Dismiss, sure?', async () => {
               await post('/api/releases/dismiss', {
                 id: ep.id,
@@ -625,8 +631,8 @@ function itemCard(r, isNew, dismissed) {
         el('span', { class: 'tag' }, KIND_TAG[r.kind] ?? r.kind),
         eventTag(r.event),
         r.date_kind ? el('span', { class: `tag date-${r.date_kind}` }, r.date_kind) : null,
-        el('span', {}, formatDate(r.date)),
-        el('span', {}, `· ${relativeDays(r.date)}`),
+        el('span', {}, formatWhen(r.date, r.air_stamp)),
+        el('span', {}, `· ${relativeWhen(r.date, r.air_stamp)}`),
       ),
     ),
     el(
@@ -1128,6 +1134,7 @@ async function loadTrending() {
  */
 function trendingMatchHint(f) {
   if (f.kinds.size === 0) return 'Turn at least one type back on.';
+  if (f.held !== 'all') return 'Try a different search, or set the Plex filter back to In Plex or not.';
   if (f.catalogue) return 'Try a different search.';
   return 'Try a different search, or tick Catalogue to include older records.';
 }
@@ -1138,7 +1145,10 @@ function renderTrending() {
   const rows = filterCatalogue(
     state.trending
       .filter((t) => f.kinds.has(t.kind))
-      .filter((t) => !q || fold(t.title).includes(q) || fold(t.subtitle).includes(q)),
+      .filter((t) => !q || fold(t.title).includes(q) || fold(t.subtitle).includes(q))
+      // "Not in Plex" keeps rows that could not be checked as well, since
+      // nothing says they are held and this filter is for finding what to get.
+      .filter((t) => f.held === 'all' || (f.held === 'held') === t.in_library),
     f.catalogue,
   );
 
@@ -1227,7 +1237,7 @@ function trendingCard(t) {
         { class: 'card-meta' },
         el('span', { class: 'tag' }, TR_TAG[t.kind] ?? t.kind),
         t.release_date ? el('span', {}, formatDate(t.release_date)) : null,
-        t.in_library ? el('span', { class: 'tag held' }, '✓ In Plex') : null,
+        trendingHeldTag(t),
       ),
     ),
     el(
@@ -1265,6 +1275,17 @@ function trendingCard(t) {
     ),
   );
   return card;
+}
+
+/**
+ * "Not in Plex" only when the row could actually be checked: a film or show
+ * needs a resolved Plex GUID, music a resolved artist. Without one, a missing
+ * tick means "don't know", and labelling that as not held would be a guess.
+ */
+function trendingHeldTag(t) {
+  if (t.in_library) return el('span', { class: 'tag held' }, '✓ In Plex');
+  const checked = t.kind === 'movie' || t.kind === 'show' ? t.guid : t.mbid;
+  return checked ? el('span', { class: 'tag not-held' }, 'Not in Plex') : null;
 }
 
 /**
@@ -1320,6 +1341,11 @@ function trendingAction(t) {
 
 $('#tr-filter').addEventListener('input', (e) => {
   state.trFilters.q = e.target.value;
+  renderTrending();
+});
+
+$('#tr-held').addEventListener('change', (e) => {
+  state.trFilters.held = e.target.value;
   renderTrending();
 });
 

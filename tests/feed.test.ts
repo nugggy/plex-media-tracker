@@ -16,6 +16,9 @@ import {
   isCatalogue,
   filterCatalogue,
   dropFollowed,
+  sydneyTime,
+  formatWhen,
+  relativeWhen,
 } from '../public/feed.js';
 
 const NOW = new Date('2026-09-19T12:00:00+10:00');
@@ -611,4 +614,59 @@ test('the one-year boundary holds on 29 February', () => {
   const leapDay = new Date('2028-02-29T01:00:00+11:00');
   assert.equal(isCatalogue(chart({ release_date: '2027-03-01' }), leapDay), false);
   assert.equal(isCatalogue(chart({ release_date: '2027-02-28' }), leapDay), true);
+});
+
+/* ------------------------------------------------- release times */
+
+/*
+ * Episodes carry a real instant from TVMaze (see src/airtimes.ts). Anything
+ * without one, a record or a film or a show TVMaze does not schedule, can only
+ * honestly be shown to the day.
+ */
+test('a Sydney release time is read off the instant', () => {
+  // Ted Lasso S04E08: noon UTC is 10pm in Sydney.
+  assert.equal(sydneyTime('2026-09-23T12:00:00+00:00'), '10:00 pm');
+  // R.J. Decker S02E02: 22:00 in New York is noon here the next day.
+  assert.equal(sydneyTime('2026-09-23T02:00:00+00:00'), '12:00 pm');
+  assert.equal(sydneyTime('2026-09-22T14:30:00+00:00'), '12:30 am');
+});
+
+test('an item with no instant has no time', () => {
+  assert.equal(sydneyTime(null), '');
+  assert.equal(sydneyTime(undefined), '');
+  assert.equal(sydneyTime('not a date'), '');
+});
+
+test('the date carries the time only when one is known', () => {
+  assert.equal(formatWhen('2026-09-23', '2026-09-23T12:00:00+00:00'), '23 September 2026, 10:00 pm');
+  assert.equal(formatWhen('2026-09-23', null), '23 September 2026');
+  assert.equal(formatWhen(null, null), '');
+});
+
+/*
+ * A 10pm episode is not out at breakfast. Saying "today" from midnight is the
+ * same mistake as the one that had shows out a day early, just smaller, so a
+ * stamp still ahead of now reads as later today.
+ */
+test('an instant still to come today reads as later today', () => {
+  const morning = new Date('2026-09-23T00:00:00+10:00'); // midnight Sydney
+  assert.equal(relativeWhen('2026-09-23', '2026-09-23T12:00:00+00:00', morning), 'later today');
+});
+
+test('an instant that has passed reads as today', () => {
+  const night = new Date('2026-09-23T23:00:00+10:00'); // 11pm Sydney, after the 10pm drop
+  assert.equal(relativeWhen('2026-09-23', '2026-09-23T12:00:00+00:00', night), 'today');
+});
+
+test('other days are unaffected by the time of day', () => {
+  const now = new Date('2026-09-22T09:00:00+10:00');
+  assert.equal(relativeWhen('2026-09-23', '2026-09-23T12:00:00+00:00', now), 'tomorrow');
+  assert.equal(relativeWhen('2026-09-21', '2026-09-21T12:00:00+00:00', now), 'yesterday');
+  assert.equal(relativeWhen('2026-09-29', '2026-09-29T12:00:00+00:00', now), 'in 7 days');
+});
+
+test('without an instant the day-level wording is unchanged', () => {
+  const now = new Date('2026-09-22T09:00:00+10:00');
+  assert.equal(relativeWhen('2026-09-22', null, now), relativeDays('2026-09-22', now));
+  assert.equal(relativeWhen('2026-09-23', null, now), 'tomorrow');
 });

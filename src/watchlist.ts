@@ -16,7 +16,7 @@ import {
   type WatchlistItem,
 } from './plexdiscover.ts';
 import { fetchLibraryGuids, listVideoSections, fetchAlbums } from './plex.ts';
-import { syncEpisodes, syncLocalEpisodes } from './episodes.ts';
+import { syncEpisodes, syncLocalEpisodes, type EpisodeSyncResult } from './episodes.ts';
 import { syncFilmDates } from './tmdb.ts';
 import { fetchMachineId } from './library.ts';
 
@@ -230,7 +230,7 @@ export interface RefreshResult {
   inLibrary: number;
   heldEpisodes: number;
   watchlist: SyncResult | null;
-  episodes: { shows: number; episodes: number; added: number; failed: number } | null;
+  episodes: EpisodeSyncResult | null;
   message: string;
 }
 
@@ -338,7 +338,8 @@ export async function refreshLibraryState(
     `${result.heldEpisodes} episodes on the server` +
     (w ? `, ${w.total} watchlist items (${w.added} new, ${w.removedInPlex} removed in Plex)` : '') +
     (result.episodes
-      ? `, ${result.episodes.episodes} episodes across ${result.episodes.shows} continuing shows.`
+      ? `, ${result.episodes.episodes} episodes across ${result.episodes.shows} continuing shows ` +
+        `(${result.episodes.timed} with a confirmed air time).`
       : '.');
   return result;
 }

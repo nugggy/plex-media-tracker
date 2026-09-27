@@ -75,6 +75,11 @@ export interface FeedItem {
   event: string | null;
   thumb: string | null;
   link: string | null;
+  /**
+   * The exact instant an episode lands, when one is known. Only episodes carry
+   * it: a record or a film has a release date and no meaningful release time.
+   */
+  air_stamp?: string | null;
   first_seen_at: string;
   dismissed: number;
   date_kind?: string | null;
@@ -119,6 +124,7 @@ function buildFeed(kind: 'out' | 'upcoming' | 'dismissed', recentDays: number): 
         event: e.event,
         thumb: `/thumb?wl=${encodeURIComponent(e.show_key)}`,
         link: null,
+        air_stamp: e.air_stamp,
         first_seen_at: e.first_seen_at,
         dismissed: e.dismissed,
         group: e.show_key,

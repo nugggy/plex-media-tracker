@@ -147,6 +147,47 @@ export function relativeDays(iso, now = new Date()) {
   return days > 0 ? `in ${days} days` : `${Math.abs(days)} days ago`;
 }
 
+/*
+ * Episodes carry a real instant from TVMaze, so they can be shown to the
+ * minute. Everything else, a record or a film, has a release date and no
+ * meaningful release time, and is shown to the day as before.
+ */
+const SYDNEY_TIME = new Intl.DateTimeFormat('en-AU', {
+  timeZone: TIMEZONE,
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
+/** The Sydney clock time an instant falls on, e.g. "10:00 pm". */
+export function sydneyTime(stamp) {
+  if (!stamp) return '';
+  const at = new Date(stamp);
+  if (Number.isNaN(at.getTime())) return '';
+  return SYDNEY_TIME.format(at).toLowerCase().replace(/ | /g, ' ');
+}
+
+/** "23 Sep 2026, 10:00 pm", or just the date when no instant is known. */
+export function formatWhen(iso, stamp) {
+  if (!iso) return '';
+  const time = sydneyTime(stamp);
+  return time ? `${formatDate(iso)}, ${time}` : formatDate(iso);
+}
+
+/**
+ * The same wording as relativeDays, except that an instant still ahead of now
+ * is not yet out. A 10pm episode called "today" from midnight is the mistake
+ * that had shows out a day early all over again, only smaller.
+ */
+export function relativeWhen(iso, stamp, now = new Date()) {
+  if (!iso) return '';
+  if (stamp && dayNumber(iso) === dayNumber(sydneyDate(now))) {
+    const at = new Date(stamp);
+    if (!Number.isNaN(at.getTime()) && at.getTime() > now.getTime()) return 'later today';
+  }
+  return relativeDays(iso, now);
+}
+
 /** Today in Sydney shifted by n days, as YYYY-MM-DD. */
 export function horizonCutoff(days, direction, now = new Date()) {
   return shiftDate(sydneyDate(now), direction === 'out' ? -days : days);

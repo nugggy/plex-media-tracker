@@ -152,6 +152,16 @@ CREATE TABLE IF NOT EXISTS episodes (
 CREATE INDEX IF NOT EXISTS idx_ep_show ON episodes(show_key);
 CREATE INDEX IF NOT EXISTS idx_ep_date ON episodes(air_date);
 
+-- Which show is which on TVMaze, so the lookup behind an episode's real air
+-- time is paid once rather than on every refresh. A show TVMaze does not carry
+-- is recorded as absent and only asked about again much later.
+CREATE TABLE IF NOT EXISTS show_air_sources (
+  show_key   TEXT PRIMARY KEY,
+  tvmaze_id  INTEGER,
+  state      TEXT NOT NULL,
+  checked_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS youtube_cache (
   query      TEXT PRIMARY KEY,
   video_id   TEXT,
