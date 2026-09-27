@@ -4,8 +4,8 @@ import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PORT, DB_PATH, APP_NAME } from './config.ts';
 import { handleApi } from './api.ts';
-import { isConfigured, getSetting } from './db.ts';
-import { runRefresh } from './scanner.ts';
+import { isConfigured } from './db.ts';
+import { startBackgroundSync } from './startup.ts';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 
@@ -61,12 +61,8 @@ server.listen(PORT, '127.0.0.1', () => {
   ].join('\n');
   process.stdout.write(`${banner}\n`);
 
-  // Catch up on the watchlist, episodes and library on every start, so the
-  // dashboard is current the moment it opens. The slow MusicBrainz scan is
-  // deliberately left for the Scan button.
-  if (isConfigured() && getSetting('sync_on_start') === '1') {
+  if (startBackgroundSync()) {
     process.stdout.write('  Syncing watchlist, episodes and library in the background\n\n');
-    void runRefresh();
   }
 });
 

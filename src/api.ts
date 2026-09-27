@@ -32,16 +32,23 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
+  // Plain bytes rather than Node buffers, so this also runs in the phone's web view.
+  const chunks: Uint8Array[] = [];
   let size = 0;
   for await (const chunk of req) {
-    size += (chunk as Buffer).length;
+    size += (chunk as Uint8Array).length;
     if (size > 1_000_000) throw new Error('Request body too large');
-    chunks.push(chunk as Buffer);
+    chunks.push(chunk as Uint8Array);
   }
   if (chunks.length === 0) return {};
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.length;
+  }
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
+    return JSON.parse(new TextDecoder().decode(all)) as Record<string, unknown>;
   } catch {
     throw new Error('Request body was not valid JSON');
   }
@@ -780,7 +787,7 @@ async function proxyThumb(
       'Content-Type': upstream.headers.get('content-type') ?? 'image/jpeg',
       'Cache-Control': 'public, max-age=86400',
     });
-    res.end(Buffer.from(await upstream.arrayBuffer()));
+    res.end(new Uint8Array(await upstream.arrayBuffer()));
   } catch {
     res.writeHead(404).end();
   }
