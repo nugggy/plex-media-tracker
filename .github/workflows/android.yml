@@ -1,0 +1,46 @@
+name: Android release
+
+# Builds a signed APK and attaches it to a GitHub release whenever a version
+# tag such as v1.2.0 is pushed. The signing key comes from repository secrets.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm run typecheck && npm test
+      - run: npm run build:mobile && npx cap sync android
+      - name: Decode keystore
+        env:
+          PMT_KEYSTORE_B64: ${{ secrets.PMT_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$PMT_KEYSTORE_B64" ]; then echo "PMT_KEYSTORE_B64 secret is missing"; exit 1; fi
+          echo "$PMT_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Build
+        working-directory: android
+        env:
+          PMT_KEYSTORE: ${{ runner.temp }}/release.jks
+          PMT_KEYSTORE_PASSWORD: ${{ secrets.PMT_KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk "plex-media-tracker-${GITHUB_REF_NAME#v}.apk"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: plex-media-tracker-*.apk

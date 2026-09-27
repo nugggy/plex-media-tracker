@@ -1,5 +1,14 @@
 apply plugin: 'com.android.application'
 
+// Release signing. On GitHub the key comes from repository secrets (PMT_KEYSTORE
+// and PMT_KEYSTORE_PASSWORD). On the PC it comes from keystore.properties in the
+// app's data folder, which sits outside the project so it never syncs or commits.
+def ksProps = new Properties()
+def ksFile = new File(System.getenv('LOCALAPPDATA') ?: '', 'PlexMediaTracker/keystore.properties')
+if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
+def ksPath = System.getenv('PMT_KEYSTORE') ?: ksProps['storeFile']
+def ksPass = System.getenv('PMT_KEYSTORE_PASSWORD') ?: ksProps['storePassword']
+
 android {
     namespace = "com.nugggy.plexmediatracker"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +16,8 @@ android {
         applicationId "com.nugggy.plexmediatracker"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 10200
+        versionName "1.2.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +25,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (ksPath) {
+                storeFile file(ksPath)
+                storePassword ksPass
+                keyAlias 'tracker'
+                keyPassword ksPass
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig ksPath ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

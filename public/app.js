@@ -1624,7 +1624,15 @@ $('#artist-clear').addEventListener('click', () => {
 
 async function loadSettings() {
   try {
-    const { settings, token_set } = await api('/api/settings');
+    const response = await api('/api/settings');
+    const { settings, token_set, platform, version, releases_url } = response;
+    $('#android-link').href = releases_url;
+    $('#android-link').textContent =
+      platform === 'mobile' ? 'Check for a newer version' : 'Get the Android app';
+    $('#app-version').textContent =
+      platform === 'mobile'
+        ? `This is version ${version}.`
+        : `The Android app runs on its own on your phone, with its own library and scans. This is version ${version}.`;
     $('#plex_url').value = settings.plex_url;
     $('#plex_token').value = token_set ? '********' : '';
     const auto = settings.plex_connection === 'auto';

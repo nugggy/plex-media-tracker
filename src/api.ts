@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as store from './db.ts';
+import { PLATFORM } from './config.ts';
+import { APP_VERSION, RELEASES_URL } from './version.ts';
 import * as wl from './watchlist-db.ts';
 import { getProgress, requestStop, runScan, runRefresh } from './scanner.ts';
 import { testConnection, thumbUrl } from './plex.ts';
@@ -546,6 +548,9 @@ export async function handleApi(
           tmdb_api_key: settings.tmdb_api_key ? '********' : '',
         },
         token_set: Boolean(settings.plex_token),
+        platform: PLATFORM,
+        version: APP_VERSION,
+        releases_url: RELEASES_URL,
       });
       return true;
     }

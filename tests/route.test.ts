@@ -33,3 +33,14 @@ test('an unknown endpoint is a JSON 404', async () => {
 test('a path outside the API is a plain 404, not a crash', async () => {
   assert.equal((await route('GET', u('/index.html'))).status, 404);
 });
+
+test('settings say which platform and version this is, and where releases live', async () => {
+  const body = json(await route('GET', u('/api/settings')));
+  assert.equal(body.platform, 'desktop');
+  assert.equal(body.version, '1.2.0');
+  assert.match(body.releases_url, /^https:\/\/github\.com\/[^/]+\/plex-media-tracker\/releases\/latest$/);
+});
+
+test('a fresh PC database keeps the typed-address connection', async () => {
+  assert.equal(json(await route('GET', u('/api/settings'))).settings.plex_connection, 'manual');
+});
