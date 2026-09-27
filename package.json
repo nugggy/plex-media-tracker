@@ -11,10 +11,14 @@
     "test": "node --test \"tests/*.test.ts\""
   },
   "devDependencies": {
-    "typescript": "^5.9.2",
-    "@types/node": "^24.3.0"
+    "@types/node": "^24.3.0",
+    "@types/sql.js": "^1.4.11",
+    "typescript": "^5.9.2"
   },
   "engines": {
     "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "sql.js": "^1.14.2"
   }
 }

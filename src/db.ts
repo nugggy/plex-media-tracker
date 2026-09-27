@@ -1,5 +1,5 @@
-import { DatabaseSync } from 'node:sqlite';
-import { DB_PATH, ensureDataDir } from './config.ts';
+import { openDatabase } from './sqlite-driver.ts';
+import type { Db } from './sqlite.ts';
 import { today, daysAgo, nowIso } from './dates.ts';
 
 export type MbStatus = 'pending' | 'resolved' | 'ambiguous' | 'not_found' | 'manual' | 'error';
@@ -179,9 +179,7 @@ CREATE TABLE IF NOT EXISTS scans (
 );
 `;
 
-ensureDataDir();
-export const db = new DatabaseSync(DB_PATH);
-db.exec('PRAGMA journal_mode = WAL');
+export const db: Db = openDatabase();
 db.exec(SCHEMA);
 
 /* ---------------------------------------------------------------- settings */
