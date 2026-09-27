@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Plex Media Tracker</string>
+    <string name="title_activity_main">Plex Media Tracker</string>
+    <string name="package_name">com.nugggy.plexmediatracker</string>
+    <string name="custom_url_scheme">com.nugggy.plexmediatracker</string>
+</resources>

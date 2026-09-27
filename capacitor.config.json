@@ -1,0 +1,6 @@
+{
+  "appId": "com.nugggy.plexmediatracker",
+  "appName": "Plex Media Tracker",
+  "webDir": "www",
+  "plugins": { "CapacitorHttp": { "enabled": true } }
+}

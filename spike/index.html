@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Background test</title>
+<style>
+  body { font: 16px system-ui; margin: 16px; background: #1e1a16; color: #eee; }
+  button { font: inherit; padding: 12px; margin: 4px 0; width: 100%; }
+  pre { white-space: pre-wrap; background: #2a241e; padding: 12px; }
+</style>
+</head>
+<body>
+<h1>Background test</h1>
+<p>
+  Set battery use for this app to Unrestricted first (Settings, Apps, Plex Media Tracker,
+  Battery). Press a start button, lock the phone, wait 10 minutes, unlock, and read the result.
+  Then press Stop and run the other mode.
+</p>
+<button id="js">Start: JS timers</button>
+<button id="native">Start: Native ticks</button>
+<button id="stop">Stop</button>
+<pre id="out">Not started.</pre>
+<script type="module">
+const Keeper = window.Capacitor.registerPlugin('ScanKeeper');
+const UA = 'PlexMediaTracker/1.2.0-spike ( local personal use )';
+// One MusicBrainz lookup a second, the same pattern and rate as a real scan.
+const MB = 'https://musicbrainz.org/ws/2/artist/5b11f4ce-a62d-471e-81fc-a69a8278c7da?fmt=json';
+let busy = false, timer = null, sub = null;
+
+const load = () => JSON.parse(localStorage.getItem('spike') ?? 'null');
+const save = (s) => localStorage.setItem('spike', JSON.stringify(s));
+
+async function once() {
+  if (busy) return;
+  busy = true;
+  try { await fetch(MB, { headers: { 'User-Agent': UA, Accept: 'application/json' } }); } catch {}
+  const s = load();
+  if (s && !s.stoppedAt) { s.done.push(Date.now()); save(s); }
+  busy = false;
+}
+
+function report() {
+  const s = load();
+  if (!s) return;
+  const elapsed = Math.round(((s.stoppedAt ?? Date.now()) - s.startedAt) / 1000);
+  const gaps = [];
+  let prev = s.startedAt;
+  for (const t of s.done) {
+    if (t - prev > 5000) gaps.push(`${Math.round((t - prev) / 1000)} s at ${new Date(t).toLocaleTimeString('en-AU')}`);
+    prev = t;
+  }
+  const ratio = elapsed ? Math.round((s.done.length / elapsed) * 100) : 0;
+  document.getElementById('out').textContent =
+    `Mode: ${s.mode}${s.stoppedAt ? ' (stopped)' : ''}\nElapsed: ${elapsed} s\nExpected: ${elapsed}\nActual: ${s.done.length}\nRatio: ${ratio}%\n` +
+    `Pass mark: 90% after 600 s\nGaps over 5 s: ${gaps.length ? '\n  ' + gaps.join('\n  ') : 'none'}`;
+}
+
+async function start(mode) {
+  await stop(false);
+  save({ mode, startedAt: Date.now(), done: [], stoppedAt: null });
+  await Keeper.start({ title: 'Background test', text: `Running (${mode})` });
+  if (mode === 'js') {
+    const loop = async () => { await once(); timer = setTimeout(loop, 1000); };
+    loop();
+  } else {
+    sub = await Keeper.addListener('tick', once);
+  }
+}
+
+async function stop(mark = true) {
+  clearTimeout(timer);
+  timer = null;
+  await sub?.remove();
+  sub = null;
+  await Keeper.stop();
+  const s = load();
+  if (mark && s && !s.stoppedAt) { s.stoppedAt = Date.now(); save(s); }
+  report();
+}
+
+document.getElementById('js').onclick = () => start('js');
+document.getElementById('native').onclick = () => start('native');
+document.getElementById('stop').onclick = () => stop();
+setInterval(report, 1000);
+document.addEventListener('visibilitychange', report);
+report();
+</script>
+</body>
+</html>
