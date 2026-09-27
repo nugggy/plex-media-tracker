@@ -7,6 +7,7 @@ import { join } from 'node:path';
 // Points the app at a throwaway folder before anything opens the database.
 process.env.PLEX_TRACKER_DATA_DIR = mkdtempSync(join(tmpdir(), 'pmt-route-'));
 const { route } = await import('../src/route.ts');
+const { APP_VERSION } = await import('../src/version.ts');
 
 const json = (r: { body: Uint8Array }) => JSON.parse(new TextDecoder().decode(r.body));
 const u = (p: string) => new URL(`http://app${p}`);
@@ -37,7 +38,8 @@ test('a path outside the API is a plain 404, not a crash', async () => {
 test('settings say which platform and version this is, and where releases live', async () => {
   const body = json(await route('GET', u('/api/settings')));
   assert.equal(body.platform, 'desktop');
-  assert.equal(body.version, '1.2.0');
+  assert.equal(body.version, APP_VERSION);
+  assert.match(body.version, /^\d+\.\d+\.\d+$/);
   assert.match(body.releases_url, /^https:\/\/github\.com\/[^/]+\/plex-media-tracker\/releases\/latest$/);
 });
 

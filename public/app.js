@@ -1651,6 +1651,10 @@ async function loadSettings() {
     const response = await api('/api/settings');
     const { settings, token_set, platform, version, releases_url } = response;
     $('#android-link').href = releases_url;
+    // On the phone, a button that updates in place replaces the download link.
+    const updater = window.pmtUpdater;
+    $('#update-row').hidden = !updater;
+    $('#android-link').hidden = Boolean(updater);
     $('#android-link').textContent =
       platform === 'mobile' ? 'Check for a newer version' : 'Get the Android app';
     $('#app-version').textContent =
@@ -1770,6 +1774,53 @@ $('#test-btn').addEventListener('click', async (e) => {
     }
   } catch (err) {
     $('#test-result').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+let pendingUpdate = null;
+
+$('#update-check-btn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $('#update-install-btn').hidden = true;
+  $('#update-result').textContent = 'Checking…';
+  try {
+    const { update, installed } = await window.pmtUpdater.check();
+    pendingUpdate = update;
+    if (!update) {
+      $('#update-result').textContent = `You have the latest version (${installed}).`;
+    } else {
+      $('#update-result').textContent = `Version ${update.version} is available.`;
+      $('#update-install-btn').textContent = `Update to ${update.version}`;
+      $('#update-install-btn').hidden = false;
+    }
+  } catch (err) {
+    $('#update-result').textContent = `Could not check for updates: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#update-install-btn').addEventListener('click', async (e) => {
+  if (!pendingUpdate) return;
+  const btn = e.currentTarget;
+  const u = window.pmtUpdater;
+  const { allowed } = await u.canInstall();
+  if (!allowed) {
+    $('#update-result').textContent =
+      'Switch on "Allow from this source" in the screen that opens, come back, then press Update again.';
+    await u.openInstallSettings();
+    return;
+  }
+  btn.disabled = true;
+  $('#update-result').textContent = 'Downloading…';
+  try {
+    await u.install(pendingUpdate.url);
+    $('#update-result').textContent = 'Press Update on the screen Android shows. Your data is kept.';
+  } catch (err) {
+    $('#update-result').textContent = err.message;
   } finally {
     btn.disabled = false;
   }

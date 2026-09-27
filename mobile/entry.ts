@@ -7,6 +7,8 @@
 import { registerPlugin } from '@capacitor/core';
 import { installFetchBridge, thumbLoader } from './bridge.ts';
 import { initMobileDatabase, flushDatabase } from './sqlite-driver.ts';
+import { LATEST_RELEASE_API, pickUpdate, type Update } from './updates.ts';
+import { APP_VERSION } from '../src/version.ts';
 
 interface ScanKeeperPlugin {
   start(o: { title: string; text: string }): Promise<void>;
@@ -15,6 +17,13 @@ interface ScanKeeperPlugin {
   requestBatteryExemption(): Promise<{ granted: boolean }>;
 }
 const ScanKeeper = registerPlugin<ScanKeeperPlugin>('ScanKeeper');
+
+interface UpdaterPlugin {
+  canInstall(): Promise<{ allowed: boolean }>;
+  openInstallSettings(): Promise<void>;
+  downloadAndInstall(o: { url: string }): Promise<void>;
+}
+const Updater = registerPlugin<UpdaterPlugin>('Updater');
 
 function askOnceForBatteryExemption(): void {
   try {
@@ -64,3 +73,22 @@ installFetchBridge(window, async (method, url, body) => (await backend)(method, 
 });
 (window as unknown as { pmtThumbLoader: (src: string) => Promise<string> }).pmtThumbLoader =
   thumbLoader(window.fetch);
+
+/**
+ * The Settings page's Check for updates button. It asks GitHub for the latest
+ * release; installing goes through the native plugin, which checks the file.
+ */
+(window as unknown as { pmtUpdater: unknown }).pmtUpdater = {
+  async check(): Promise<{ update: Update | null; installed: string }> {
+    const r = await window.fetch(LATEST_RELEASE_API, {
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (r.status === 404) return { update: null, installed: APP_VERSION };
+    if (!r.ok) throw new Error(`GitHub answered ${r.status}`);
+    return { update: pickUpdate(await r.json(), APP_VERSION), installed: APP_VERSION };
+  },
+  canInstall: () => Updater.canInstall(),
+  openInstallSettings: () => Updater.openInstallSettings(),
+  install: (url: string) => Updater.downloadAndInstall({ url }),
+};

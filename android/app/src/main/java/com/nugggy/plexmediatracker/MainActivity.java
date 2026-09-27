@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ScanKeeperPlugin.class);
+        registerPlugin(UpdaterPlugin.class);
         super.onCreate(savedInstanceState);
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);

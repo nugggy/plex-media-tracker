@@ -977,3 +977,8 @@ legend {
   color: var(--bad);
   background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
+
+/* The hidden attribute always wins, even over a class that sets display. */
+[hidden] {
+  display: none !important;
+}
