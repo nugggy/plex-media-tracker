@@ -17,7 +17,7 @@ The Node-only imports are confined to `src/server.ts`, `src/api.ts`,
 sites across 11 files, all synchronous.
 
 Remote access works. Plex reports the server as fully accessible outside the
-network, public address 1.156.62.8:20972. The automatic lookup added on
+network, with a public address and port. The automatic lookup added on
 27/09/2026 (`src/plexconnect.ts`) finds the server on plex.tv and picked the
 secure LAN address from the PC. The public address did not answer from inside
 the house, which is expected: most home routers do not loop a request back to
@@ -152,7 +152,7 @@ to 1.2.0.
 Download links: the PC Settings page gets a "Get the Android app" link, and the
 phone's Settings page a "Check for a newer version" link. Both point at
 `https://github.com/<owner>/plex-media-tracker/releases/latest`. The repository
-is private, so the phone must be signed in to GitHub to download. The phone
+was made public on 27/09/2026, so downloads need no GitHub sign-in. The phone
 Settings page also shows the installed version.
 
 ## Testing
