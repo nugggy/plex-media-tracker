@@ -31,6 +31,19 @@ jobs:
         run: |
           if [ -z "$PMT_KEYSTORE_B64" ]; then echo "PMT_KEYSTORE_B64 secret is missing"; exit 1; fi
           echo "$PMT_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Check the signing key opens
+        # Prints only a fingerprint and a length, never the key or password, so
+        # a bad secret can be told apart from a damaged key file.
+        env:
+          PMT_KEYSTORE_PASSWORD: ${{ secrets.PMT_KEYSTORE_PASSWORD }}
+        run: |
+          echo "key file sha256 starts: $(sha256sum "$RUNNER_TEMP/release.jks" | cut -c1-16)"
+          echo "password length: ${#PMT_KEYSTORE_PASSWORD}"
+          if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$PMT_KEYSTORE_PASSWORD" > /dev/null 2>&1; then
+            echo "::error::The key file did not open with PMT_KEYSTORE_PASSWORD. Compare the fingerprint and length above with the PC's."
+            exit 1
+          fi
+          echo "Signing key opens."
       - name: Build
         working-directory: android
         env:
