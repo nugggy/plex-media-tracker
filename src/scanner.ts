@@ -44,6 +44,9 @@ const progress: Progress = {
 
 let stopRequested = false;
 
+/** The phone uses these to keep a foreground service running during a check. */
+export const scanHooks = { onStart: (): void => {}, onEnd: (): void => {} };
+
 export function getProgress(): Progress {
   return { ...progress };
 }
@@ -84,6 +87,7 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     startedAt: nowIso(),
     finishedAt: null,
   });
+  scanHooks.onStart();
 
   const scanId = store.startScanRecord();
   let artistsSeen = 0;
@@ -210,6 +214,7 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     );
   } finally {
     stopRequested = false;
+    scanHooks.onEnd();
   }
 
   return getProgress();
@@ -337,6 +342,7 @@ export async function runRefresh(parts?: RefreshPart[]): Promise<Progress> {
     startedAt: nowIso(),
     finishedAt: null,
   });
+  scanHooks.onStart();
 
   try {
     const result = await refreshLibraryState((m) => {
@@ -357,6 +363,8 @@ export async function runRefresh(parts?: RefreshPart[]): Promise<Progress> {
       finishedAt: nowIso(),
       message: `Refresh failed: ${(err as Error).message}`,
     });
+  } finally {
+    scanHooks.onEnd();
   }
   return getProgress();
 }
