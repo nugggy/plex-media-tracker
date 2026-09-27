@@ -233,7 +233,12 @@ export function setSetting(key: string, value: string): void {
 }
 
 export function isConfigured(): boolean {
-  return Boolean(getSetting('plex_url') && getSetting('plex_token') && getSetting('plex_section'));
+  // Automatic mode finds its address at the start of each check, so a server
+  // picked but not yet reached still counts as set up.
+  const reachable =
+    Boolean(getSetting('plex_url')) ||
+    (getSetting('plex_connection') === 'auto' && Boolean(getSetting('plex_machine_id')));
+  return reachable && Boolean(getSetting('plex_token') && getSetting('plex_section'));
 }
 
 /* ----------------------------------------------------------------- artists */

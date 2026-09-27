@@ -75,3 +75,27 @@ test('a missing thumbnail rejects, so the page can show its placeholder', async 
   const load = thumbLoader((async () => new Response(null, { status: 404 })) as typeof fetch);
   await assert.rejects(load('/thumb?key=1'));
 });
+
+test('the same thumbnail is fetched once, however often the page redraws', async () => {
+  let fetches = 0;
+  const load = thumbLoader((async () => {
+    fetches += 1;
+    return new Response(new Uint8Array([1]), { status: 200 });
+  }) as typeof fetch);
+  const [a, b] = await Promise.all([load('/thumb?key=1'), load('/thumb?key=1')]);
+  const c = await load('/thumb?key=1');
+  assert.equal(fetches, 1);
+  assert.equal(a, b);
+  assert.equal(a, c);
+});
+
+test('a failed thumbnail is not cached, so a later redraw can try again', async () => {
+  let fetches = 0;
+  const load = thumbLoader((async () => {
+    fetches += 1;
+    return new Response(null, { status: fetches === 1 ? 500 : 200 });
+  }) as typeof fetch);
+  await assert.rejects(load('/thumb?key=2'));
+  await load('/thumb?key=2');
+  assert.equal(fetches, 2);
+});

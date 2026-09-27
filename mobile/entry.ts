@@ -36,18 +36,22 @@ const backend = initMobileDatabase().then(async () => {
 
   let poll: ReturnType<typeof setInterval> | null = null;
   scanner.scanHooks.onStart = () => {
-    void ScanKeeper.start({ title: 'Plex Media Tracker', text: 'Checking for updates' });
+    // If Android will not start the service, the check still runs, only
+    // without protection from being paused while the app is off screen.
+    ScanKeeper.start({ title: 'Plex Media Tracker', text: 'Checking for updates' }).catch((err) =>
+      console.warn('Background service not started:', err),
+    );
     askOnceForBatteryExemption();
     poll = setInterval(() => {
       const p = scanner.getProgress();
-      void ScanKeeper.update({ text: p.message || 'Checking for updates' });
+      ScanKeeper.update({ text: p.current || p.message || 'Checking for updates' }).catch(() => {});
     }, 5000);
   };
   scanner.scanHooks.onEnd = () => {
     if (poll) clearInterval(poll);
     poll = null;
     void flushDatabase();
-    void ScanKeeper.stop();
+    ScanKeeper.stop().catch(() => {});
   };
 
   startBackgroundSync();

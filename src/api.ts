@@ -564,14 +564,16 @@ export async function handleApi(
       }
       // Automatic mode has no typed address, so find one now. If the server
       // cannot be reached this minute, the next check tries again.
+      let warning: string | null = null;
       if (store.getSetting('plex_connection') === 'auto') {
         try {
           await ensurePlexUrl();
-        } catch {
-          // Saved regardless; the Test connection button shows why.
+        } catch (err) {
+          // Saved regardless. Each check looks the server up again.
+          warning = `Saved, but the server could not be reached just now: ${(err as Error).message}`;
         }
       }
-      send(res, 200, { ok: true, configured: store.isConfigured() });
+      send(res, 200, { ok: true, configured: store.isConfigured(), warning });
       return true;
     }
 

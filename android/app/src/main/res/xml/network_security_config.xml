@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Plex on a home network is usually plain http://192.168.x.x:32400, and Android
+  blocks plain http by default. Android cannot limit this to private address
+  ranges, so it is allowed generally. The app itself refuses to send the Plex
+  token to a non-local address over plain http (src/plexconnect.ts).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

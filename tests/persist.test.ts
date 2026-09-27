@@ -56,3 +56,52 @@ test('flush saves straight away when there is something to save, and not otherwi
   await s.flush();
   assert.equal(saves, 1);
 });
+
+test('a failed save keeps the changes and tries again', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  let attempts = 0;
+  let saved = 0;
+  const s = createSaver({
+    save: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('disk full');
+      saved += 1;
+    },
+    inTransaction: () => false,
+  });
+  s.markDirty();
+  mock.timers.tick(5000);
+  await settle();
+  assert.equal(saved, 0);
+  mock.timers.tick(5000);
+  await settle();
+  assert.equal(saved, 1);
+  mock.timers.reset();
+});
+
+test('two saves never run at the same time', async () => {
+  let running = 0;
+  let peak = 0;
+  let release: () => void = () => {};
+  const s = createSaver({
+    save: async () => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise<void>((r) => (release = r));
+      running -= 1;
+    },
+    inTransaction: () => false,
+  });
+  s.markDirty();
+  const first = s.flush();
+  await settle();
+  s.markDirty();
+  const second = s.flush();
+  const third = s.flush();
+  await settle();
+  release();
+  await settle();
+  release();
+  await Promise.all([first, second, third]);
+  assert.equal(peak, 1);
+});

@@ -706,6 +706,25 @@ function eventTag(event) {
   return el('span', { class: `tag event${tone}` }, event);
 }
 
+let lazyArtwork = null;
+function artworkObserver() {
+  lazyArtwork ??= new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        const img = e.target;
+        lazyArtwork.unobserve(img);
+        window.pmtThumbLoader(img.dataset.src).then(
+          (local) => (img.src = local),
+          () => img.dispatchEvent(new Event('error')),
+        );
+      }
+    },
+    { rootMargin: '200px' },
+  );
+  return lazyArtwork;
+}
+
 function artwork(src, name) {
   const fallback = () =>
     img.replaceWith(el('div', { class: 'art art-fallback' }, (name || '?').charAt(0).toUpperCase()));
@@ -714,7 +733,12 @@ function artwork(src, name) {
   const loader = window.pmtThumbLoader;
   const img = el('img', { class: 'art', src: loader ? null : src, alt: '', loading: 'lazy' });
   img.addEventListener('error', fallback);
-  if (loader) loader(src).then((local) => (img.src = local), fallback);
+  if (loader) {
+    if (!src) queueMicrotask(fallback);
+    // Fetched only once on screen, the way loading="lazy" works for a plain image.
+    else artworkObserver().observe(img);
+    img.dataset.src = src || '';
+  }
   return img;
 }
 
@@ -1769,7 +1793,7 @@ $('#settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const select = $('#plex_section');
   try {
-    await post('/api/settings', {
+    const saved = await post('/api/settings', {
       plex_connection: connectionMode(),
       plex_url: $('#plex_url').value.trim(),
       plex_token: $('#plex_token').value.trim(),
@@ -1787,8 +1811,8 @@ $('#settings-form').addEventListener('submit', async (e) => {
       sync_on_start: $('#sync_on_start').checked ? '1' : '0',
       tmdb_api_key: $('#tmdb_api_key').value.trim(),
     });
-    $('#save-result').textContent = 'Saved';
-    setTimeout(() => ($('#save-result').textContent = ''), 2500);
+    $('#save-result').textContent = saved.warning || 'Saved';
+    if (!saved.warning) setTimeout(() => ($('#save-result').textContent = ''), 2500);
     refreshState();
   } catch (err) {
     $('#save-result').textContent = err.message;

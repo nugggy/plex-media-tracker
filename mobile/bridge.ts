@@ -65,9 +65,20 @@ export function installFetchBridge(
  * object URL. A failure rejects, so artwork() shows its letter placeholder.
  */
 export function thumbLoader(fetchFn: typeof fetch): (src: string) => Promise<string> {
-  return async (src) => {
-    const r = await fetchFn(src);
-    if (!r.ok) throw new Error(`Artwork ${r.status}`);
-    return URL.createObjectURL(await r.blob());
+  // One fetch per picture for the life of the app. Lists redraw on every
+  // keystroke in a filter, and each fetch may cross mobile data to Plex.
+  const cache = new Map<string, Promise<string>>();
+  return (src) => {
+    const hit = cache.get(src);
+    if (hit) return hit;
+    const p = (async () => {
+      const r = await fetchFn(src);
+      if (!r.ok) throw new Error(`Artwork ${r.status}`);
+      return URL.createObjectURL(await r.blob());
+    })();
+    cache.set(src, p);
+    // A failure is not remembered, so the next redraw can try again.
+    p.catch(() => cache.delete(src));
+    return p;
   };
 }

@@ -52,9 +52,14 @@ public class ScanService extends Service {
     }
 
     private Notification notification(String title, String text) {
-        Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());
-        PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Builder(this, CHANNEL)
+        return build(this, title, text);
+    }
+
+    /** Also used by the plugin to change the text without restarting the service. */
+    static Notification build(android.content.Context ctx, String title, String text) {
+        Intent open = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
+        PendingIntent pi = PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE);
+        return new Notification.Builder(ctx, CHANNEL)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_notify_sync)

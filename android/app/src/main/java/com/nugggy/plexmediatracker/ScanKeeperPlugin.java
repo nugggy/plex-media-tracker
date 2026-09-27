@@ -1,5 +1,6 @@
 package com.nugggy.plexmediatracker;
 
+import android.app.NotificationManager;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Handler;
@@ -33,10 +34,18 @@ public class ScanKeeperPlugin extends Plugin {
 
     @PluginMethod
     public void start(PluginCall call) {
-        Intent intent = new Intent(getContext(), ScanService.class)
-                .putExtra("title", call.getString("title"))
-                .putExtra("text", call.getString("text"));
-        getContext().startForegroundService(intent);
+        // Android refuses to start a foreground service from the background in
+        // some states. That must fail the call, not crash the app: the scan
+        // still runs, it just is not protected while the app is off screen.
+        try {
+            Intent intent = new Intent(getContext(), ScanService.class)
+                    .putExtra("title", call.getString("title"))
+                    .putExtra("text", call.getString("text"));
+            getContext().startForegroundService(intent);
+        } catch (RuntimeException e) {
+            call.reject("Could not start the background service: " + e.getMessage());
+            return;
+        }
         if (!ticking) {
             ticking = true;
             handler.post(tick);
@@ -44,13 +53,17 @@ public class ScanKeeperPlugin extends Plugin {
         call.resolve();
     }
 
+    /** Changes the notification text in place, without asking Android to start anything. */
     @PluginMethod
     public void update(PluginCall call) {
         if (ScanService.running) {
-            Intent intent = new Intent(getContext(), ScanService.class)
-                    .putExtra("title", "Plex Media Tracker")
-                    .putExtra("text", call.getString("text"));
-            getContext().startForegroundService(intent);
+            try {
+                NotificationManager nm = getContext().getSystemService(NotificationManager.class);
+                nm.notify(ScanService.ID, ScanService.build(
+                        getContext(), "Plex Media Tracker", call.getString("text", "Checking for updates")));
+            } catch (RuntimeException e) {
+                // A stale notification is not worth failing over.
+            }
         }
         call.resolve();
     }
