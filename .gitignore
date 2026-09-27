@@ -8,3 +8,14 @@ data/
 *.db
 *.db-wal
 *.db-shm
+
+# Android build output and signing keys. A committed keystore would let anyone
+# sign builds as this app.
+dist/
+www/
+android/app/build/
+android/.gradle/
+android/build/
+*.jks
+*.keystore
+keystore.properties

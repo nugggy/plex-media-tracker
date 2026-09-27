@@ -23,9 +23,11 @@ secure LAN address from the PC. The public address did not answer from inside
 the house, which is expected: most home routers do not loop a request back to
 their own public address. It gets its real test from the phone on mobile data.
 
-The build machine has the Android SDK (platform 36, build tools 36.1.0) and
-OpenJDK 17 at `C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot`. `java` on
-the PATH is an old Java 8, so the build sets `JAVA_HOME` itself. There is no
+The build machine has the Android SDK (platform 36, build tools 36.1.0).
+Capacitor 8 needs JDK 21, so the build uses the JDK 21 that ships with Android
+Studio, at `C:\Program Files\Android\Android Studio\jbr`, rather than the
+OpenJDK 17 also installed. `java` on the PATH is an old Java 8, so the build
+sets `JAVA_HOME` itself. There is no
 `gh` CLI; Git Credential Manager is configured.
 
 The phone is a OnePlus 15. OxygenOS is among the harshest Android skins for
@@ -133,7 +135,7 @@ uncommitted work already in the tree (air times, then remote access) is
 committed as separate commits.
 
 A GitHub Actions workflow, `.github/workflows/android.yml`, runs on a `v*` tag.
-It sets up JDK 17 and Node 24, runs the tests, bundles, syncs Capacitor, and
+It sets up JDK 21 and Node 24, runs the tests, bundles, syncs Capacitor, and
 builds a signed release APK with Gradle. It publishes a GitHub release with the
 APK attached as `plex-media-tracker-<version>.apk`.
 
