@@ -707,10 +707,14 @@ function eventTag(event) {
 }
 
 function artwork(src, name) {
-  const img = el('img', { class: 'art', src, alt: '', loading: 'lazy' });
-  img.addEventListener('error', () => {
+  const fallback = () =>
     img.replaceWith(el('div', { class: 'art art-fallback' }, (name || '?').charAt(0).toUpperCase()));
-  });
+  // The phone app cannot load /thumb as a plain image address, so it supplies
+  // a loader that fetches the picture and hands back a local address.
+  const loader = window.pmtThumbLoader;
+  const img = el('img', { class: 'art', src: loader ? null : src, alt: '', loading: 'lazy' });
+  img.addEventListener('error', fallback);
+  if (loader) loader(src).then((local) => (img.src = local), fallback);
   return img;
 }
 
