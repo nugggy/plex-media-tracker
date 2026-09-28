@@ -6,25 +6,25 @@
 
 :root {
   /* Surfaces, from the page backdrop up to a hovered control. */
-  --bg: #26211a;
-  --surface: #322b23;
-  --surface-2: #3d352b;
-  --surface-3: #494036;
-  --header-top: #322b23;
-  --well: rgba(0, 0, 0, 0.35);
+  --bg: #000;
+  --surface: #141414;
+  --surface-2: #1f1f1f;
+  --surface-3: #2b2b2b;
+  --header-top: #141414;
+  --well: rgba(255, 255, 255, 0.08);
 
   /* Borders. The strong tone is for a hovered or armed edge. */
-  --line: #4a4036;
-  --line-strong: #5b5046;
+  --line: #2c2c2c;
+  --line-strong: #414141;
 
   /* Text. */
-  --text: #e9e1d7;
-  --muted: #b3a699;
+  --text: #ececec;
+  --muted: #a3a3a3;
 
   /* The accent, and the near-black that stays legible on top of it. */
   --accent: #c97b3c;
   --accent-hover: #d98a48;
-  --accent-soft: #4c3722;
+  --accent-soft: #33240f;
   --accent-line: #5c4225;
   --accent-line-strong: #6b4a29;
   --on-accent: #1a1209;
@@ -976,6 +976,136 @@ legend {
   border-color: var(--bad);
   color: var(--bad);
   background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+/* ------------------------------------------------------------ dashboard */
+
+.dash-heading {
+  font-size: 15px;
+  margin: 22px 0 10px;
+}
+.dash-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dash-heading-row .dash-heading {
+  margin-bottom: 10px;
+}
+.dash-heading-row select {
+  width: auto;
+  margin-top: 12px;
+}
+
+.stream-row {
+  align-items: start;
+}
+/* Posters, not artist portraits, so they keep their shape. */
+.stream-row .art,
+.poster-row .art {
+  width: 48px;
+  height: 72px;
+  border-radius: 6px;
+}
+.stream-main {
+  min-width: 0;
+}
+.stream-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.stream-progress .bar {
+  flex: 1;
+}
+
+.added-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 14px;
+  margin-top: 10px;
+}
+.added-item {
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.added-item .art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+}
+.added-title {
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.added-item .artist-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0 14px;
+}
+
+.rank-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.rank-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+.rank-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rank-bar {
+  height: 8px;
+  background: var(--well);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.rank-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 0 4px 4px 0;
+}
+.rank-value {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .dash-grid {
+    grid-template-columns: 1fr;
+  }
+  .stream-row {
+    grid-template-columns: 48px 1fr;
+  }
+  .stream-row .card-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
 }
 
 /* The hidden attribute always wins, even over a class that sets display. */

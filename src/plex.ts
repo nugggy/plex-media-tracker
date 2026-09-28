@@ -22,7 +22,15 @@ export interface PlexAlbum {
   year: number | null;
 }
 
-export class PlexError extends Error {}
+export class PlexError extends Error {
+  /** The HTTP status Plex answered with, when it answered at all. */
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
 
 /** Nothing answered at the address, as opposed to Plex answering with an error. */
 export class PlexUnreachable extends PlexError {}
@@ -57,7 +65,7 @@ interface PlexMetadata {
   }[];
 }
 
-interface PlexContainer {
+export interface PlexContainer {
   MediaContainer?: {
     Directory?: PlexMetadata[];
     Metadata?: PlexMetadata[];
@@ -72,7 +80,7 @@ function cleanBaseUrl(raw: string): string {
   return trimmed;
 }
 
-async function plexGet(
+export async function plexGet(
   baseUrl: string,
   token: string,
   path: string,
@@ -99,10 +107,10 @@ async function plexGet(
   }
 
   if (res.status === 401) {
-    throw new PlexError('Plex rejected the token. Check the X-Plex-Token value in Settings.');
+    throw new PlexError('Plex rejected the token. Check the X-Plex-Token value in Settings.', 401);
   }
   if (!res.ok) {
-    throw new PlexError(`Plex returned HTTP ${res.status} for ${path}`);
+    throw new PlexError(`Plex returned HTTP ${res.status} for ${path}`, res.status);
   }
   return (await res.json()) as PlexContainer;
 }
@@ -270,5 +278,5 @@ export async function testConnection(baseUrl: string, token: string): Promise<Pl
 /** Builds a URL that proxies a Plex thumbnail through the Plex server. */
 export function thumbUrl(baseUrl: string, token: string, thumb: string | null): string | null {
   if (!thumb) return null;
-  return `${cleanBaseUrl(baseUrl)}${thumb}?X-Plex-Token=${encodeURIComponent(token)}`;
+  return `${cleanBaseUrl(baseUrl)}${thumb}${thumb.includes('?') ? '&' : '?'}X-Plex-Token=${encodeURIComponent(token)}`;
 }

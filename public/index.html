@@ -60,6 +60,9 @@
         Artists <span class="pill" id="count-artists">0</span>
       </button>
       <button class="tab" data-tab="search" role="tab">Search</button>
+      <button class="tab" data-tab="dash" role="tab">
+        Dashboard <span class="pill" id="count-streams" hidden>0</span>
+      </button>
       <button class="tab" data-tab="library" role="tab">Library</button>
       <button class="tab" data-tab="suggestions" role="tab">Suggestions</button>
       <button class="tab" data-tab="trending" role="tab">Trending</button>
@@ -204,6 +207,72 @@
         </div>
         <div class="filter-summary"><span id="search-summary"></span></div>
         <div id="search-results" class="cards"></div>
+      </section>
+
+      <!-- Dashboard ----------------------------------------------------- -->
+      <section id="panel-dash" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            Read live from your Plex server each time you open this tab. Now playing refreshes every
+            ten seconds while you are here.
+          </p>
+        </div>
+
+        <section class="chart-card">
+          <div class="chart-head">
+            <div>
+              <h2>Now playing</h2>
+              <p class="muted small" id="np-summary">Checking</p>
+            </div>
+          </div>
+          <div id="np-list" class="artists"></div>
+        </section>
+
+        <h2 class="dash-heading">Libraries</h2>
+        <div class="tiles" id="dash-libs"></div>
+
+        <section class="chart-card">
+          <div class="chart-head">
+            <div>
+              <h2>Recently added</h2>
+              <p class="muted small">The latest to arrive on the server.</p>
+            </div>
+          </div>
+          <div id="dash-added" class="added-strip"></div>
+        </section>
+
+        <div class="dash-heading-row">
+          <h2 class="dash-heading">Watch history</h2>
+          <select id="hist-days" class="input" aria-label="History period">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="365">Last year</option>
+          </select>
+        </div>
+        <div class="tiles" id="hist-tiles"></div>
+        <div class="dash-grid">
+          <section class="chart-card">
+            <div class="chart-head"><h2>Most watched</h2></div>
+            <div id="hist-titles" class="rank-list"></div>
+          </section>
+          <section class="chart-card">
+            <div class="chart-head"><h2>Most active users</h2></div>
+            <div id="hist-users" class="rank-list"></div>
+          </section>
+          <section class="chart-card">
+            <div class="chart-head"><h2>Top platforms</h2></div>
+            <div id="hist-platforms" class="rank-list"></div>
+          </section>
+          <section class="chart-card">
+            <div class="chart-head"><h2>Plays by type</h2></div>
+            <div id="hist-kinds" class="rank-list"></div>
+          </section>
+        </div>
+        <section class="chart-card">
+          <div class="chart-head"><h2>Recent plays</h2></div>
+          <div id="hist-recent" class="artists"></div>
+        </section>
       </section>
 
       <!-- Library ------------------------------------------------------- -->

@@ -24,6 +24,7 @@ import {
   isSearchThumbHost,
 } from './search.ts';
 import { getDetails } from './details.ts';
+import { nowPlaying, stopStream, libraryStats, recentlyAdded, history, isPlexArtPath, resizedArtPath } from './dash.ts';
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
@@ -184,6 +185,7 @@ export async function handleApi(
         url.searchParams.get('wl'),
         url.searchParams.get('t'),
         url.searchParams.get('url'),
+        url.searchParams.get('px'),
       );
       return true;
     }
@@ -361,6 +363,45 @@ export async function handleApi(
 
     if (path === '/api/library' && req.method === 'GET') {
       send(res, 200, libraryReport());
+      return true;
+    }
+
+    /* --------------------------------------------------------- dashboard */
+    if (path === '/api/dash/sessions' && req.method === 'GET') {
+      const now = await nowPlaying();
+      send(res, 200, {
+        ...now,
+        streams: now.streams.map((s) => ({ ...s, thumb: s.thumb ? `/thumb?px=${encodeURIComponent(s.thumb)}` : null })),
+      });
+      return true;
+    }
+
+    if (path === '/api/dash/stop' && req.method === 'POST') {
+      const body = await readJson(req);
+      const sessionId = String(body.session_id ?? '');
+      if (!sessionId) return bad(res, 'session_id is required');
+      const reason = String(body.reason ?? '').trim() || 'The server owner stopped this stream.';
+      await stopStream(sessionId, reason.slice(0, 200));
+      send(res, 200, { ok: true });
+      return true;
+    }
+
+    if (path === '/api/dash/library' && req.method === 'GET') {
+      const [stats, added] = await Promise.all([libraryStats(), recentlyAdded()]);
+      send(res, 200, {
+        libraries: stats,
+        added: added.map((a) => ({ ...a, thumb: a.thumb ? `/thumb?px=${encodeURIComponent(a.thumb)}` : null })),
+      });
+      return true;
+    }
+
+    if (path === '/api/dash/history' && req.method === 'GET') {
+      const days = Math.min(365, Math.max(1, Number(url.searchParams.get('days')) || 30));
+      const h = await history(days);
+      send(res, 200, {
+        ...h,
+        recent: h.recent.map((p) => ({ ...p, thumb: p.thumb ? `/thumb?px=${encodeURIComponent(p.thumb)}` : null })),
+      });
       return true;
     }
 
@@ -754,6 +795,7 @@ async function proxyThumb(
   watchlistKey: string | null,
   searchThumb: string | null = null,
   directUrl: string | null = null,
+  plexArt: string | null = null,
 ): Promise<void> {
   const token = store.getSetting('plex_token');
   let target: string | null = null;
@@ -764,7 +806,10 @@ async function proxyThumb(
   // their target is server-built, not page-supplied text.
   let isAllowed: ((url: string) => boolean) | null = null;
 
-  if (directUrl) {
+  if (plexArt) {
+    // Checked against a fixed shape, and aimed only at the saved server.
+    target = isPlexArtPath(plexArt) ? thumbUrl(store.getSetting('plex_url'), token, resizedArtPath(plexArt)) : null;
+  } else if (directUrl) {
     target = allowedThumbHost(directUrl) ? directUrl : null;
     isAllowed = allowedThumbHost;
   } else if (searchThumb) {
