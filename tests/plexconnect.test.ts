@@ -44,6 +44,62 @@ test('only servers you own are listed', () => {
   );
 });
 
+/**
+ * What a real server sends with includeHttps=1: every address, the LAN one
+ * included, only as a plex.direct name. A phone whose DNS will not resolve that
+ * name to a home address, and a router with no NAT loopback for the public one,
+ * leave nothing that works at home. So the bare LAN address is added too.
+ */
+test('a LAN address listed only as plex.direct also gets a plain one that needs no DNS', () => {
+  const [server] = parseResources([
+    {
+      name: 'Home',
+      provides: 'server',
+      clientIdentifier: 'h1',
+      owned: true,
+      connections: [
+        { uri: 'https://192-168-0-162.h1.plex.direct:32400', protocol: 'https', address: '192.168.0.162', port: 32400, local: true },
+        { uri: 'https://10-0-5-1.h1.plex.direct:32400', protocol: 'https', address: '10.0.5.1', port: 32400, local: true },
+        { uri: 'https://203-0-113-5.h1.plex.direct:20972', protocol: 'https', address: '203.0.113.5', port: 20972, local: false },
+        { uri: 'https://138-199-1-1.h1.plex.direct:8443', protocol: 'https', address: '138.199.1.1', port: 8443, relay: true },
+      ],
+    },
+  ]);
+  assert.deepEqual(
+    orderConnections(server.connections).map((c) => c.uri),
+    [
+      'https://192-168-0-162.h1.plex.direct:32400',
+      'https://10-0-5-1.h1.plex.direct:32400',
+      'http://192.168.0.162:32400',
+      'http://10.0.5.1:32400',
+      'https://203-0-113-5.h1.plex.direct:20972',
+      'https://138-199-1-1.h1.plex.direct:8443',
+    ],
+  );
+});
+
+test('a plain address is never made up for a public IP, even one marked local', () => {
+  const [server] = parseResources([
+    {
+      name: 'Odd',
+      provides: 'server',
+      clientIdentifier: 'o1',
+      owned: true,
+      connections: [{ uri: 'https://203-0-113-5.o1.plex.direct:32400', address: '203.0.113.5', port: 32400, local: true }],
+    },
+  ]);
+  assert.deepEqual(
+    server.connections.map((c) => c.uri),
+    ['https://203-0-113-5.o1.plex.direct:32400'],
+  );
+});
+
+test('a plain LAN address already listed is not added twice', () => {
+  const [server] = parseResources(RESOURCES);
+  const uris = server.connections.map((c) => c.uri);
+  assert.equal(uris.filter((u) => u === 'http://192.168.1.10:32400').length, 1);
+});
+
 test('a payload that is not a list gives no servers', () => {
   assert.deepEqual(parseResources({ error: 'nope' }), []);
   assert.deepEqual(parseResources(null), []);

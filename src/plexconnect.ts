@@ -40,7 +40,35 @@ interface RawResource {
   provides?: string;
   clientIdentifier?: string;
   owned?: boolean;
-  connections?: { uri?: string; local?: boolean; relay?: boolean }[];
+  connections?: { uri?: string; address?: string; port?: number; local?: boolean; relay?: boolean }[];
+}
+
+/** 10/8, 172.16/12 and 192.168/16: addresses that never cross the internet. */
+function isPrivateIPv4(address: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(address);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+/**
+ * With includeHttps=1 plex.tv lists even the LAN address as a plex.direct name,
+ * and that name only works if the device's DNS will hand back a home address.
+ * Many phones and routers refuse to, as a guard against DNS rebinding, and at
+ * home the public address is often no use either, because routers without NAT
+ * loopback refuse it from inside. So each private LAN address is also offered
+ * bare, over plain http, which needs no DNS at all. The token stays on the
+ * home network, and probeIdentity still checks it is the right server.
+ */
+function withPlainLan(connections: PlexConnection[], raw: NonNullable<RawResource['connections']>): PlexConnection[] {
+  const out = [...connections];
+  for (const c of raw) {
+    if (c.local !== true || c.relay === true || !c.address || !c.port) continue;
+    if (!isPrivateIPv4(c.address)) continue;
+    const uri = `http://${c.address}:${c.port}`;
+    if (!out.some((o) => o.uri === uri)) out.push({ uri, local: true, relay: false });
+  }
+  return out;
 }
 
 /**
@@ -56,9 +84,12 @@ export function parseResources(data: unknown): PlexServer[] {
     .map((r) => ({
       machineId: String(r.clientIdentifier),
       name: r.name ?? 'Plex',
-      connections: (r.connections ?? [])
-        .filter((c) => c.uri)
-        .map((c) => ({ uri: String(c.uri), local: c.local === true, relay: c.relay === true })),
+      connections: withPlainLan(
+        (r.connections ?? [])
+          .filter((c) => c.uri)
+          .map((c) => ({ uri: String(c.uri), local: c.local === true, relay: c.relay === true })),
+        r.connections ?? [],
+      ),
     }));
 }
 
