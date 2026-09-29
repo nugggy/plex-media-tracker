@@ -414,6 +414,11 @@ main {
 #upcoming-list .art-fallback {
   font-size: 40px;
 }
+/* A film or show poster is 2:3, so its box is too: the whole poster, title and all. */
+#out-list .art-poster,
+#upcoming-list .art-poster {
+  height: 180px;
+}
 
 .card-title {
   font-weight: 600;
@@ -847,6 +852,10 @@ legend {
   #upcoming-list .art {
     width: 92px;
     height: 92px;
+  }
+  #out-list .art-poster,
+  #upcoming-list .art-poster {
+    height: 138px;
   }
   .field.narrow {
     grid-template-columns: 1fr;

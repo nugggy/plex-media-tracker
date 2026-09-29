@@ -619,7 +619,8 @@ function itemCard(r, isNew, dismissed) {
   };
 
   card.append(
-    artwork(r.thumb, r.title),
+    // Films and shows have 2:3 posters, and a square box would crop the title off them.
+    artwork(r.thumb, r.title, r.kind === 'movie' || r.kind === 'show'),
     el(
       'div',
       {},
@@ -741,13 +742,14 @@ function artworkObserver() {
   return lazyArtwork;
 }
 
-function artwork(src, name) {
+function artwork(src, name, poster = false) {
+  const cls = poster ? 'art art-poster' : 'art';
   const fallback = () =>
-    img.replaceWith(el('div', { class: 'art art-fallback' }, (name || '?').charAt(0).toUpperCase()));
+    img.replaceWith(el('div', { class: `${cls} art-fallback` }, (name || '?').charAt(0).toUpperCase()));
   // The phone app cannot load /thumb as a plain image address, so it supplies
   // a loader that fetches the picture and hands back a local address.
   const loader = window.pmtThumbLoader;
-  const img = el('img', { class: 'art', src: loader ? null : src, alt: '', loading: 'lazy' });
+  const img = el('img', { class: cls, src: loader ? null : src, alt: '', loading: 'lazy' });
   img.addEventListener('error', fallback);
   if (loader) {
     if (!src) queueMicrotask(fallback);
