@@ -397,3 +397,17 @@ export function filterCatalogue(rows, includeCatalogue, now = new Date()) {
 export function dropFollowed(rows) {
   return rows.filter((s) => !s.tracked);
 }
+
+/**
+ * The Lyrics tab's summary line. Covered means Plex already has the lyric,
+ * stored means this app holds it, missing means neither. An instrumental has
+ * nothing to find, so it is counted on its own and is neither stored nor
+ * missing.
+ */
+export function lyricCounts(tracks) {
+  const counts = { covered: 0, stored: 0, missing: 0, instrumental: 0, total: tracks.length };
+  for (const t of tracks) {
+    if (t.state in counts) counts[t.state] += 1;
+  }
+  return counts;
+}

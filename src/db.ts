@@ -392,6 +392,13 @@ export function replacePlexAlbums(rows: PlexAlbumRow[]): void {
   }
 }
 
+/** The albums Plex holds for one artist, as last read. */
+export function albumsOf(artistKey: string): PlexAlbumRow[] {
+  return db
+    .prepare('SELECT * FROM plex_albums WHERE artist_key = ? ORDER BY year, title COLLATE NOCASE')
+    .all(artistKey) as unknown as PlexAlbumRow[];
+}
+
 export function ownedTitles(artistKey: string): Set<string> {
   const rows = db
     .prepare('SELECT norm_title FROM plex_albums WHERE artist_key = ?')

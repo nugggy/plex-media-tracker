@@ -138,6 +138,22 @@ our position after removing TMDB's duplicate entries, not TMDB's.
 Building the chart takes a little over two minutes, most of it MusicBrainz
 matching each country artist at its one-request-a-second limit.
 
+**Lyrics** shows which tracks in your music library have no lyrics. Pick an
+artist, and an album if you like, and each track is marked In Plex when Plex
+already carries a lyrics stream for it, Stored here when this app holds one,
+Instrumental, or Missing. **Find lyrics** asks LRCLIB about every missing track
+in the view. It needs no key. The exact lookup by artist, title, album and
+length comes first, and a search by artist and title stands in when that
+misses, but a result is only accepted from the same artist and within three
+seconds of the track's length, because no lyric is better than the wrong one.
+A track LRCLIB does not carry is not asked about again for a fortnight.
+**Read** opens a stored lyric in the card, and **Paste lyrics** stores one by
+hand, either plain text or a timed LRC file.
+
+Found lyrics live in this app's database only. Nothing is written into the
+music library, because Plex has no way to accept a lyric for a track and the
+files sit on a NAS this PC cannot write to under the path Plex reports.
+
 ## Cinema versus digital
 
 Plex gives one date per film, which is normally the cinema release, not the day

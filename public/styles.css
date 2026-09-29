@@ -482,6 +482,22 @@ a.link:hover {
 
 /* ------------------------------------------------------- youtube player */
 
+/* A lyric opened in its card, the way the trailer player opens. */
+.lyric-text {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.5;
+}
+.lyric-input {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  font: inherit;
+}
+
 .player {
   grid-column: 1 / -1;
   margin-top: 12px;

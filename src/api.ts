@@ -4,8 +4,16 @@ import { PLATFORM } from './config.ts';
 import { APP_VERSION, RELEASES_URL } from './version.ts';
 import * as wl from './watchlist-db.ts';
 import { getProgress, requestStop, runScan, runRefresh } from './scanner.ts';
-import { testConnection, thumbUrl } from './plex.ts';
-import { ensurePlexUrl, listServers, resolveServer } from './plexconnect.ts';
+import { testConnection, thumbUrl, fetchTracks } from './plex.ts';
+import { ensurePlexUrl, listServers, resolveServer, withPlex } from './plexconnect.ts';
+import {
+  trackStates,
+  fetchLyrics,
+  lyricsProgress,
+  getLyric,
+  saveLyric,
+  type Track,
+} from './lyrics.ts';
 import { posterUrl, verifyAccount } from './plexdiscover.ts';
 import { removeItem, restoreItem, type RefreshPart } from './watchlist.ts';
 import { isMbid } from './matching.ts';
@@ -25,6 +33,24 @@ import {
 } from './search.ts';
 import { getDetails } from './details.ts';
 import { nowPlaying, stopStream, libraryStats, recentlyAdded, history, isPlexArtPath, resizedArtPath } from './dash.ts';
+
+/** Tracks as the page sends them back, with anything malformed dropped. */
+function trackList(raw: unknown): Track[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Track[] = [];
+  for (const t of raw as Record<string, unknown>[]) {
+    if (!t || typeof t !== 'object' || !t.rating_key || !t.title || !t.artist) continue;
+    out.push({
+      rating_key: String(t.rating_key),
+      title: String(t.title),
+      artist: String(t.artist),
+      album: t.album ? String(t.album) : null,
+      duration_ms: typeof t.duration_ms === 'number' ? t.duration_ms : null,
+      covered: t.covered === true,
+    });
+  }
+  return out;
+}
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
@@ -575,6 +601,63 @@ export async function handleApi(
       const id = String(body.id ?? '');
       if (!kind || !id) return bad(res, 'kind and id are required');
       hideTrending(kind, id, body.hidden !== false);
+      send(res, 200, { ok: true });
+      return true;
+    }
+
+    /* ------------------------------------------------------------ lyrics */
+    if (path === '/api/lyrics/tracks' && req.method === 'GET') {
+      const artist = url.searchParams.get('artist') ?? '';
+      const album = url.searchParams.get('album') ?? '';
+      if (!artist && !album) return bad(res, 'artist or album is required');
+      const token = store.getSetting('plex_token');
+      try {
+        const tracks = await withPlex((base) =>
+          album ? fetchTracks(base, token, album, 'album') : fetchTracks(base, token, artist, 'artist'),
+        );
+        send(res, 200, {
+          tracks: trackStates(tracks),
+          albums: artist ? store.albumsOf(artist).map((a) => ({ plex_key: a.plex_key, title: a.title, year: a.year })) : [],
+        });
+      } catch (err) {
+        return bad(res, (err as Error).message);
+      }
+      return true;
+    }
+
+    if (path === '/api/lyrics/fetch' && req.method === 'POST') {
+      if (lyricsProgress().running) return bad(res, 'Lyrics are already being fetched.');
+      const body = await readJson(req);
+      const tracks = trackList(body.tracks);
+      if (tracks.length === 0) return bad(res, 'No tracks to fetch lyrics for.');
+      // Not awaited: an album is seconds, an artist can be a minute, so the
+      // page polls /api/lyrics/progress.
+      void fetchLyrics(tracks).catch(() => {});
+      send(res, 202, { started: true, count: tracks.length });
+      return true;
+    }
+
+    if (path === '/api/lyrics/progress' && req.method === 'GET') {
+      send(res, 200, lyricsProgress());
+      return true;
+    }
+
+    if (path === '/api/lyrics/one' && req.method === 'GET') {
+      const key = url.searchParams.get('rating_key') ?? '';
+      if (!key) return bad(res, 'rating_key is required');
+      send(res, 200, { lyric: getLyric(key) ?? null });
+      return true;
+    }
+
+    if (path === '/api/lyrics/manual' && req.method === 'POST') {
+      const body = await readJson(req);
+      const [track] = trackList([body.track]);
+      const text = String(body.text ?? '').trim();
+      if (!track) return bad(res, 'A track is required.');
+      if (!text) return bad(res, 'Paste the lyrics first.');
+      // Timed lines such as [01:23.45] mean an LRC file was pasted.
+      const synced = /^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/m.test(text);
+      saveLyric(track, { synced: synced ? text : null, plain: synced ? null : text, instrumental: false }, 'manual');
       send(res, 200, { ok: true });
       return true;
     }

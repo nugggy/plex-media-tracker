@@ -66,6 +66,7 @@
       <button class="tab" data-tab="library" role="tab">Library</button>
       <button class="tab" data-tab="suggestions" role="tab">Suggestions</button>
       <button class="tab" data-tab="trending" role="tab">Trending</button>
+      <button class="tab" data-tab="lyrics" role="tab">Lyrics</button>
       <button class="tab" data-tab="settings" role="tab">Settings</button>
     </nav>
 
@@ -393,6 +394,27 @@
         </div>
         <div class="filter-summary"><span id="tr-summary"></span></div>
         <div id="tr-list" class="cards"></div>
+      </section>
+
+      <!-- Lyrics -------------------------------------------------------- -->
+      <section id="panel-lyrics" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            Which tracks in your music library have no lyrics. Found lyrics are kept here, in the
+            app, and nothing is written to the library.
+          </p>
+          <button type="button" class="btn" id="ly-fetch" disabled>Find lyrics</button>
+        </div>
+        <div class="filters">
+          <select class="input" id="ly-artist" aria-label="Artist">
+            <option value="">Choose an artist</option>
+          </select>
+          <select class="input" id="ly-album" aria-label="Album" disabled>
+            <option value="">All albums</option>
+          </select>
+        </div>
+        <div class="filter-summary"><span id="ly-summary"></span></div>
+        <div id="ly-list" class="cards"></div>
       </section>
 
       <!-- Settings ------------------------------------------------------ -->

@@ -61,7 +61,7 @@ interface PlexMetadata {
   Media?: {
     videoResolution?: string;
     videoCodec?: string;
-    Part?: { size?: number }[];
+    Part?: { size?: number; Stream?: { streamType?: number }[] }[];
   }[];
 }
 
@@ -243,6 +243,54 @@ export async function fetchAlbums(
       title: String(i.title),
       norm_title: normaliseTitle(String(i.title)),
       year: typeof i.year === 'number' ? i.year : null,
+    }));
+}
+
+export interface PlexTrack {
+  rating_key: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  duration_ms: number | null;
+  /** True when Plex carries a lyrics stream (type 4, lrc or txt) for the track. */
+  covered: boolean;
+}
+
+interface TrackMetadata extends PlexMetadata {
+  grandparentTitle?: string;
+  parentTitle?: string;
+  duration?: number;
+}
+
+/**
+ * The tracks under one artist or one album, with whether Plex already has
+ * lyrics for each. Checked against the real server: an album's children are
+ * its tracks, and an artist's allLeaves are every track across its albums,
+ * both carrying the streams, so "has lyrics" is a direct read.
+ */
+export async function fetchTracks(
+  baseUrl: string,
+  token: string,
+  key: string,
+  kind: 'artist' | 'album',
+): Promise<PlexTrack[]> {
+  const data = await plexGet(
+    baseUrl,
+    token,
+    `/library/metadata/${key}/${kind === 'artist' ? 'allLeaves' : 'children'}`,
+  );
+  const items = (data.MediaContainer?.Metadata ?? []) as TrackMetadata[];
+  return items
+    .filter((i) => i.type === 'track' && i.ratingKey && i.title)
+    .map((i) => ({
+      rating_key: String(i.ratingKey),
+      title: String(i.title),
+      artist: String(i.grandparentTitle ?? ''),
+      album: i.parentTitle ?? null,
+      duration_ms: typeof i.duration === 'number' ? i.duration : null,
+      covered: (i.Media ?? []).some((m) =>
+        (m.Part ?? []).some((p) => (p.Stream ?? []).some((s) => s.streamType === 4)),
+      ),
     }));
 }
 

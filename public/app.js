@@ -21,6 +21,7 @@ import {
   dayHeading,
   filterSuggestionYears,
   dropFollowed,
+  lyricCounts,
   filterCatalogue,
 } from './feed.js';
 
@@ -71,6 +72,7 @@ const state = {
   gaps: null,
   library: null,
   machineId: null,
+  lyrics: { artistsLoaded: false, artist: '', album: '', tracks: [] },
   // The Dashboard's refresh timer, and which stream's Stop is waiting for a second press.
   dash: { timer: null, stopArmed: null },
 };
@@ -132,6 +134,7 @@ function showTab(name) {
   if (name === 'artists') loadArtists();
   if (name === 'suggestions') loadSuggestions();
   if (name === 'trending') loadTrending();
+  if (name === 'lyrics') loadLyrics();
   if (name === 'settings') loadSettings();
 }
 $$('.tab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
@@ -1423,6 +1426,231 @@ async function pollTrending() {
   } catch {
     $('#trending-btn').disabled = false;
     $('#trending-btn').textContent = 'Build trending';
+  }
+}
+
+/* ---------------------------------------------------------------- lyrics */
+
+async function loadLyrics() {
+  const ly = state.lyrics;
+  if (ly.artistsLoaded) return;
+  try {
+    const { artists } = await api('/api/artists');
+    const select = $('#ly-artist');
+    select.replaceChildren(
+      el('option', { value: '' }, 'Choose an artist'),
+      ...artists.map((a) => el('option', { value: a.plex_key }, a.name)),
+    );
+    ly.artistsLoaded = true;
+  } catch (err) {
+    banner(err.message);
+  }
+}
+
+async function loadLyricTracks() {
+  const ly = state.lyrics;
+  if (!ly.artist) {
+    ly.tracks = [];
+    renderLyrics();
+    return;
+  }
+  $('#ly-summary').textContent = 'Reading tracks from Plex…';
+  try {
+    const params = ly.album ? { album: ly.album } : { artist: ly.artist };
+    const r = await api(`/api/lyrics/tracks?${new URLSearchParams(params)}`);
+    ly.tracks = r.tracks;
+    if (!ly.album) {
+      const albumSelect = $('#ly-album');
+      albumSelect.replaceChildren(
+        el('option', { value: '' }, 'All albums'),
+        ...r.albums.map((a) => el('option', { value: a.plex_key }, a.year ? `${a.title} (${a.year})` : a.title)),
+      );
+      albumSelect.disabled = r.albums.length === 0;
+    }
+    renderLyrics();
+  } catch (err) {
+    banner(err.message);
+    $('#ly-summary').textContent = '';
+  }
+}
+
+const LYRIC_STATE_LABEL = {
+  covered: 'In Plex',
+  stored: 'Stored here',
+  instrumental: 'Instrumental',
+  missing: 'Missing',
+};
+
+function renderLyrics() {
+  const ly = state.lyrics;
+  const counts = lyricCounts(ly.tracks);
+  const missing = ly.tracks.filter((t) => t.state === 'missing');
+  $('#ly-fetch').disabled = missing.length === 0;
+  $('#ly-summary').textContent = ly.tracks.length
+    ? `${plural(counts.total, 'track')}: ${counts.covered} with lyrics in Plex, ${counts.stored} stored here, ` +
+      `${counts.instrumental} instrumental, ${counts.missing} missing`
+    : '';
+
+  const list = $('#ly-list');
+  list.replaceChildren();
+  if (ly.tracks.length === 0) {
+    list.append(
+      el(
+        'div',
+        { class: 'empty' },
+        el('strong', {}, ly.artist ? 'No tracks' : 'Pick an artist'),
+        ly.artist ? 'Plex lists nothing under this choice.' : 'Then choose an album, or leave it on all albums.',
+      ),
+    );
+    return;
+  }
+  for (const t of ly.tracks) list.append(lyricCard(t));
+}
+
+function lyricCard(t) {
+  const card = el('article', { class: 'card' });
+  const tagClass = t.state === 'covered' ? 'tag held' : t.state === 'stored' ? 'tag part-held' : 'tag';
+  const minutes = t.duration_ms ? `${Math.floor(t.duration_ms / 60000)}:${String(Math.round((t.duration_ms % 60000) / 1000)).padStart(2, '0')}` : null;
+  card.append(
+    el('div', { class: 'art art-fallback' }, (t.title || '?').charAt(0).toUpperCase()),
+    el(
+      'div',
+      {},
+      el('p', { class: 'card-title' }, t.title),
+      el('p', { class: 'card-artist' }, t.album || ''),
+      el(
+        'div',
+        { class: 'card-meta' },
+        el('span', { class: tagClass }, (t.state === 'covered' || t.state === 'stored' ? '✓ ' : '') + LYRIC_STATE_LABEL[t.state]),
+        minutes ? el('span', {}, minutes) : null,
+        t.source === 'manual' ? el('span', { class: 'muted small' }, 'pasted by hand') : null,
+      ),
+    ),
+    el(
+      'div',
+      { class: 'card-actions' },
+      t.state === 'stored'
+        ? el('button', { class: 'btn btn-tiny', onclick: () => toggleLyric(t, card) }, 'Read')
+        : null,
+      t.state === 'covered'
+        ? null
+        : el('button', { class: 'btn btn-tiny', onclick: () => togglePaste(t, card) }, 'Paste lyrics'),
+    ),
+  );
+  return card;
+}
+
+/** Timed lines read as plain text: the stamps are for players, not people. */
+function stripTimestamps(lrc) {
+  return lrc
+    .split('\n')
+    .map((line) => line.replace(/^(\[\d{1,2}:\d{2}(?:\.\d{1,3})?\])+\s?/, ''))
+    .join('\n')
+    .trim();
+}
+
+async function toggleLyric(t, card) {
+  const existing = card.querySelector('.player');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  $$('.player').forEach((p) => p.remove());
+  const holder = el('div', { class: 'player' }, el('div', { class: 'muted small' }, 'Loading…'));
+  card.append(holder);
+  try {
+    const { lyric } = await api(`/api/lyrics/one?${new URLSearchParams({ rating_key: t.rating_key })}`);
+    const text = lyric?.plain || (lyric?.synced ? stripTimestamps(lyric.synced) : '');
+    holder.replaceChildren(
+      el(
+        'div',
+        { class: 'player-bar' },
+        el('span', { class: 'player-title muted small' }, lyric?.synced ? 'Timed lyrics, shown as text' : 'Lyrics'),
+        el('button', { class: 'btn btn-tiny', onclick: () => holder.remove() }, 'Close'),
+      ),
+      el('pre', { class: 'lyric-text' }, text || 'Nothing stored.'),
+    );
+  } catch (err) {
+    holder.replaceChildren(el('div', { class: 'muted small' }, err.message));
+  }
+}
+
+function togglePaste(t, card) {
+  const existing = card.querySelector('.player');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  $$('.player').forEach((p) => p.remove());
+  const input = el('textarea', { class: 'input lyric-input', placeholder: 'Paste the lyrics, or an LRC file with timed lines' });
+  const save = el(
+    'button',
+    {
+      class: 'btn btn-tiny btn-primary',
+      onclick: async () => {
+        save.disabled = true;
+        try {
+          await post('/api/lyrics/manual', { track: t, text: input.value });
+          banner(`Lyrics saved for ${t.title}.`, 'ok');
+          loadLyricTracks();
+        } catch (err) {
+          banner(err.message);
+          save.disabled = false;
+        }
+      },
+    },
+    'Save',
+  );
+  card.append(
+    el(
+      'div',
+      { class: 'player' },
+      input,
+      el(
+        'div',
+        { class: 'card-actions' },
+        save,
+        el('button', { class: 'btn btn-tiny', onclick: (e) => e.currentTarget.closest('.player').remove() }, 'Cancel'),
+      ),
+    ),
+  );
+  input.focus();
+}
+
+$('#ly-artist').addEventListener('change', (e) => {
+  state.lyrics.artist = e.target.value;
+  state.lyrics.album = '';
+  $('#ly-album').value = '';
+  loadLyricTracks();
+});
+
+$('#ly-album').addEventListener('change', (e) => {
+  state.lyrics.album = e.target.value;
+  loadLyricTracks();
+});
+
+$('#ly-fetch').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await post('/api/lyrics/fetch', { tracks: state.lyrics.tracks.filter((t) => t.state === 'missing') });
+    pollLyrics();
+  } catch (err) {
+    banner(err.message);
+    btn.disabled = false;
+  }
+});
+
+async function pollLyrics() {
+  try {
+    const { running, message } = await api('/api/lyrics/progress');
+    $('#ly-fetch').textContent = running ? 'Finding…' : 'Find lyrics';
+    if (message) banner(message, running ? undefined : 'ok');
+    if (running) setTimeout(pollLyrics, 1000);
+    else loadLyricTracks();
+  } catch {
+    $('#ly-fetch').textContent = 'Find lyrics';
+    $('#ly-fetch').disabled = false;
   }
 }
 
