@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { syncDueOnStart, SYNC_ON_START_GAP_MS } from '../src/startup.ts';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// Its own throwaway database: startup.ts opens one on import, and test files
+// run in parallel, so sharing the default file would mean sharing its locks.
+process.env.PLEX_TRACKER_DATA_DIR = mkdtempSync(join(tmpdir(), 'pmt-start-'));
+const { syncDueOnStart, SYNC_ON_START_GAP_MS } = await import('../src/startup.ts');
 
 const NOW = Date.parse('2026-09-29T08:00:00.000Z');
 const ago = (ms: number) => new Date(NOW - ms).toISOString();

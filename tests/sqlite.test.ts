@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import initSqlJs from 'sql.js';
-import { openNodeDatabase } from '../src/sqlite-driver.ts';
+import { openNodeDatabase, retryWhileLocked } from '../src/sqlite-driver.ts';
 import { wrapSqlJs } from '../src/sqlite-wasm.ts';
 import type { Db } from '../src/sqlite.ts';
 
@@ -73,6 +73,75 @@ test('sql.js: writes are reported, reads are not', () => {
   assert.equal(writes, before);
   assert.ok(before >= 2);
 });
+
+/*
+ * Switching a fresh database to WAL needs an exclusive lock, and when two
+ * processes open the same file at the same moment SQLite answers one of them
+ * "database is locked" at once, without waiting, to avoid a deadlock. That is
+ * what happened when the test files ran in parallel on CI. The open retries.
+ */
+test('node:sqlite: a locked answer is retried until it clears', () => {
+  let calls = 0;
+  const slept: number[] = [];
+  const out = retryWhileLocked(
+    () => {
+      calls += 1;
+      if (calls < 3) throw lockedError();
+      return 'open';
+    },
+    1_000,
+    (ms) => slept.push(ms),
+  );
+  assert.equal(out, 'open');
+  assert.equal(calls, 3);
+  assert.equal(slept.length, 2);
+});
+
+test('node:sqlite: a lock that never clears gives up once the time allowed is spent', () => {
+  let calls = 0;
+  let clock = 0;
+  assert.throws(
+    () =>
+      retryWhileLocked(
+        () => {
+          calls += 1;
+          throw lockedError();
+        },
+        500,
+        (ms) => {
+          clock += ms;
+        },
+        () => clock,
+      ),
+    /database is locked/,
+  );
+  assert.ok(calls > 1);
+  assert.ok(clock >= 500);
+});
+
+test('node:sqlite: any other error is thrown straight away', () => {
+  let calls = 0;
+  assert.throws(
+    () =>
+      retryWhileLocked(
+        () => {
+          calls += 1;
+          throw new Error('no such table');
+        },
+        1_000,
+        () => {},
+      ),
+    /no such table/,
+  );
+  assert.equal(calls, 1);
+});
+
+function lockedError(): Error {
+  return Object.assign(new Error('database is locked'), {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 5,
+  });
+}
 
 test('node:sqlite: a write waits for another process to finish, rather than failing as locked', async () => {
   const { mkdtempSync } = await import('node:fs');
