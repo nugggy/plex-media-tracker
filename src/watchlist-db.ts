@@ -210,6 +210,23 @@ export function replaceLibraryGuids(rows: LibraryEntry[]): void {
 }
 
 /** Flags every watchlist item whose GUID is already held on the server. */
+/** What the last library read found, by type, title and year, for matching without a GUID. */
+export function libraryTitles(): { type: string; title: string; year: number | null }[] {
+  return db.prepare('SELECT type, title, year FROM library_guids').all() as {
+    type: string;
+    title: string;
+    year: number | null;
+  }[];
+}
+
+/** The Discover keys of everything currently on my own watchlist. */
+export function listedKeys(): Set<string> {
+  const rows = db.prepare("SELECT rating_key FROM watchlist_items WHERE state = 'listed'").all() as {
+    rating_key: string;
+  }[];
+  return new Set(rows.map((r) => r.rating_key));
+}
+
 export function refreshInLibraryFlags(): number {
   db.exec('UPDATE watchlist_items SET in_library = 0');
   db.exec(

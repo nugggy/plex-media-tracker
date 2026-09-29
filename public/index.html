@@ -66,6 +66,7 @@
       <button class="tab" data-tab="library" role="tab">Library</button>
       <button class="tab" data-tab="suggestions" role="tab">Suggestions</button>
       <button class="tab" data-tab="trending" role="tab">Trending</button>
+      <button class="tab" data-tab="friends" role="tab">Friends</button>
       <button class="tab" data-tab="lyrics" role="tab">Lyrics</button>
       <button class="tab" data-tab="settings" role="tab">Settings</button>
     </nav>
@@ -394,6 +395,38 @@
         </div>
         <div class="filter-summary"><span id="tr-summary"></span></div>
         <div id="tr-list" class="cards"></div>
+      </section>
+
+      <!-- Friends ------------------------------------------------------- -->
+      <section id="panel-friends" class="panel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            What your Plex friends have on their watchlists. Only friends who share their
+            watchlist appear with anything in it.
+          </p>
+          <button type="button" class="btn" id="fr-refresh">Refresh</button>
+        </div>
+        <div class="filters">
+          <select class="input" id="fr-friend" aria-label="Friend">
+            <option value="all">All friends</option>
+          </select>
+          <input
+            type="search"
+            id="fr-filter"
+            class="input search"
+            placeholder="Search friends' watchlists"
+            autocomplete="off"
+          />
+          <div class="chips" id="fr-chips" role="group" aria-label="Type">
+            <button type="button" class="chip is-on" data-fr="movie">Films</button>
+            <button type="button" class="chip is-on" data-fr="show">Shows</button>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="fr-hide-held" checked /> Hide what I have
+          </label>
+        </div>
+        <div class="filter-summary"><span id="fr-summary"></span></div>
+        <div id="fr-list" class="cards"></div>
       </section>
 
       <!-- Lyrics -------------------------------------------------------- -->

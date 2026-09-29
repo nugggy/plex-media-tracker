@@ -73,6 +73,13 @@ const state = {
   library: null,
   machineId: null,
   lyrics: { artistsLoaded: false, artist: '', album: '', tracks: [] },
+  friends: {
+    listLoaded: false,
+    friend: 'all',
+    items: [],
+    notes: [],
+    filters: { q: '', kinds: new Set(['movie', 'show']), hideHeld: true },
+  },
   // The Dashboard's refresh timer, and which stream's Stop is waiting for a second press.
   dash: { timer: null, stopArmed: null },
 };
@@ -135,6 +142,7 @@ function showTab(name) {
   if (name === 'suggestions') loadSuggestions();
   if (name === 'trending') loadTrending();
   if (name === 'lyrics') loadLyrics();
+  if (name === 'friends') loadFriends();
   if (name === 'settings') loadSettings();
 }
 $$('.tab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
@@ -1428,6 +1436,184 @@ async function pollTrending() {
     $('#trending-btn').textContent = 'Build trending';
   }
 }
+
+/* --------------------------------------------------------------- friends */
+
+async function loadFriends() {
+  const fr = state.friends;
+  if (!fr.listLoaded) {
+    try {
+      const { friends } = await api('/api/friends');
+      $('#fr-friend').replaceChildren(
+        el('option', { value: 'all' }, 'All friends'),
+        ...friends.map((f) => el('option', { value: f.id }, f.name)),
+      );
+      fr.listLoaded = true;
+    } catch (err) {
+      banner(err.message);
+      return;
+    }
+  }
+  loadFriendItems();
+}
+
+async function loadFriendItems() {
+  const fr = state.friends;
+  $('#fr-summary').textContent = 'Reading watchlists from plex.tv…';
+  try {
+    const r = await api(`/api/friends/watchlist?${new URLSearchParams({ friend: fr.friend })}`);
+    fr.items = r.items;
+    fr.notes = r.notes;
+    renderFriends();
+  } catch (err) {
+    banner(err.message);
+    $('#fr-summary').textContent = '';
+  }
+}
+
+function renderFriends() {
+  const fr = state.friends;
+  const f = fr.filters;
+  const q = fold(f.q).trim();
+  const rows = fr.items
+    .filter((i) => f.kinds.has(i.type))
+    .filter((i) => !f.hideHeld || (!i.on_watchlist && !i.in_library))
+    .filter((i) => !q || fold(i.title).includes(q) || i.friends.some((n) => fold(n).includes(q)))
+    // Most wanted first: a title several friends share is the strongest signal.
+    .sort((a, b) => b.friends.length - a.friends.length || cmp(a.title, b.title));
+
+  $('#fr-summary').textContent = fr.items.length
+    ? `${rows.length} of ${plural(fr.items.length, 'title')}` +
+      (fr.notes.length ? ` · ${fr.notes.join('; ')}` : '')
+    : fr.notes.join('; ');
+
+  const list = $('#fr-list');
+  list.replaceChildren();
+  if (rows.length === 0) {
+    list.append(
+      el(
+        'div',
+        { class: 'empty' },
+        el('strong', {}, fr.items.length ? 'Nothing matches' : 'Nothing shared'),
+        fr.items.length
+          ? 'Untick Hide what I have, or turn a type back on.'
+          : 'No friend on your account shares a watchlist with anything in it.',
+      ),
+    );
+    return;
+  }
+  for (const i of rows) list.append(friendCard(i));
+}
+
+function friendCard(i) {
+  const card = el('article', { class: 'card' });
+  const held = i.in_library
+    ? el('span', { class: 'tag held' }, '✓ In Plex')
+    : i.on_watchlist
+      ? el('span', { class: 'tag held' }, '✓ On my watchlist')
+      : null;
+  card.append(
+    el('div', { class: 'art art-fallback' }, (i.title || '?').charAt(0).toUpperCase()),
+    el(
+      'div',
+      {},
+      el('p', { class: 'card-title' }, i.title),
+      el(
+        'p',
+        { class: 'card-artist' },
+        i.friends.length === 1 ? `${i.friends[0]}'s watchlist` : `${i.friends.length} friends: ${i.friends.join(', ')}`,
+      ),
+      el(
+        'div',
+        { class: 'card-meta' },
+        el('span', { class: 'tag' }, i.type === 'movie' ? 'film' : 'show'),
+        i.year ? el('span', {}, String(i.year)) : null,
+        held,
+      ),
+    ),
+    el(
+      'div',
+      { class: 'card-actions' },
+      el(
+        'button',
+        {
+          class: 'btn btn-tiny',
+          onclick: () => togglePlayer({ kind: i.type, title: i.title, year: i.year }, card),
+        },
+        'Trailer',
+      ),
+      i.on_watchlist ? null : friendAddButton(i),
+    ),
+  );
+  return card;
+}
+
+function friendAddButton(i) {
+  const label = 'Add to watchlist';
+  return el(
+    'button',
+    {
+      class: 'btn btn-tiny btn-primary',
+      onclick: async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.textContent = 'Adding…';
+        try {
+          const r = await post('/api/search/add', { kind: i.type, id: i.rating_key, title: i.title });
+          banner(r.message, 'ok');
+          i.on_watchlist = true;
+          renderFriends();
+          refreshState();
+        } catch (err) {
+          banner(err.message);
+          btn.disabled = false;
+          btn.textContent = label;
+        }
+      },
+    },
+    label,
+  );
+}
+
+$('#fr-friend').addEventListener('change', (e) => {
+  state.friends.friend = e.target.value;
+  loadFriendItems();
+});
+
+$('#fr-filter').addEventListener('input', (e) => {
+  state.friends.filters.q = e.target.value;
+  renderFriends();
+});
+
+$('#fr-hide-held').addEventListener('change', (e) => {
+  state.friends.filters.hideHeld = e.target.checked;
+  renderFriends();
+});
+
+$$('#fr-chips .chip').forEach((chip) =>
+  chip.addEventListener('click', () => {
+    const k = chip.dataset.fr;
+    const set = state.friends.filters.kinds;
+    if (set.has(k)) set.delete(k);
+    else set.add(k);
+    chip.classList.toggle('is-on', set.has(k));
+    renderFriends();
+  }),
+);
+
+$('#fr-refresh').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await post('/api/friends/refresh');
+    state.friends.listLoaded = false;
+    await loadFriends();
+  } catch (err) {
+    banner(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 /* ---------------------------------------------------------------- lyrics */
 

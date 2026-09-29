@@ -7,6 +7,14 @@ import { getProgress, requestStop, runScan, runRefresh } from './scanner.ts';
 import { testConnection, thumbUrl, fetchTracks } from './plex.ts';
 import { ensurePlexUrl, listServers, resolveServer, withPlex } from './plexconnect.ts';
 import {
+  communityGql,
+  cachedFriends,
+  cachedWatchlist,
+  clearFriendCache,
+  flagItems,
+  mergeAcrossFriends,
+} from './friends.ts';
+import {
   trackStates,
   fetchLyrics,
   lyricsProgress,
@@ -601,6 +609,52 @@ export async function handleApi(
       const id = String(body.id ?? '');
       if (!kind || !id) return bad(res, 'kind and id are required');
       hideTrending(kind, id, body.hidden !== false);
+      send(res, 200, { ok: true });
+      return true;
+    }
+
+    /* ----------------------------------------------------------- friends */
+    if (path === '/api/friends' && req.method === 'GET') {
+      const token = store.getSetting('plex_token');
+      if (!token) return bad(res, 'Add your Plex token in Settings first.');
+      try {
+        const friends = await cachedFriends(communityGql(token));
+        send(res, 200, { friends });
+      } catch (err) {
+        return bad(res, (err as Error).message);
+      }
+      return true;
+    }
+
+    if (path === '/api/friends/watchlist' && req.method === 'GET') {
+      const token = store.getSetting('plex_token');
+      if (!token) return bad(res, 'Add your Plex token in Settings first.');
+      const which = url.searchParams.get('friend') ?? 'all';
+      const gql = communityGql(token);
+      try {
+        const friends = await cachedFriends(gql);
+        const chosen = which === 'all' ? friends : friends.filter((f) => f.id === which);
+        if (chosen.length === 0) return bad(res, 'That friend is not on your account.');
+        const notes: string[] = [];
+        const lists: { friend: string; items: Awaited<ReturnType<typeof cachedWatchlist>> }[] = [];
+        for (const f of chosen) {
+          try {
+            lists.push({ friend: f.name, items: await cachedWatchlist(gql, f.id) });
+          } catch (err) {
+            // One private or failing watchlist must not empty the whole view.
+            notes.push(`${f.name}: ${(err as Error).message}`);
+          }
+        }
+        const items = flagItems(mergeAcrossFriends(lists), wl.listedKeys(), wl.libraryTitles());
+        send(res, 200, { items, notes });
+      } catch (err) {
+        return bad(res, (err as Error).message);
+      }
+      return true;
+    }
+
+    if (path === '/api/friends/refresh' && req.method === 'POST') {
+      clearFriendCache();
       send(res, 200, { ok: true });
       return true;
     }

@@ -138,6 +138,16 @@ our position after removing TMDB's duplicate entries, not TMDB's.
 Building the chart takes a little over two minutes, most of it MusicBrainz
 matching each country artist at its one-request-a-second limit.
 
+**Friends** shows what the friends on your Plex account have on their
+watchlists, read live from plex.tv and kept for half an hour. Plex shares a
+friend's list only when that friend allows it, and shares just the title, type
+and year, so there are no posters here. Every friend's list is shown together
+by default, and a title several friends share floats to the top with their
+names on it; pick one friend to see only theirs. Each row says when the title
+is already on your own watchlist or on your server, and **Hide what I have**
+is ticked to start with so the list is what is new to you. **Add to watchlist**
+puts it on your real Plex watchlist, the same as Search does.
+
 **Lyrics** shows which tracks in your music library have no lyrics. Pick an
 artist, and an album if you like, and each track is marked In Plex when Plex
 already carries a lyrics stream for it, Stored here when this app holds one,
