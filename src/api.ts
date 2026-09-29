@@ -663,11 +663,18 @@ export async function handleApi(
     if (path === '/api/lyrics/tracks' && req.method === 'GET') {
       const artist = url.searchParams.get('artist') ?? '';
       const album = url.searchParams.get('album') ?? '';
-      if (!artist && !album) return bad(res, 'artist or album is required');
+      const library = url.searchParams.get('library') === '1';
+      if (!artist && !album && !library) return bad(res, 'artist, album or library is required');
       const token = store.getSetting('plex_token');
+      const section = store.getSetting('plex_section');
+      if (library && !section) return bad(res, 'Choose a music library in Settings first.');
       try {
         const tracks = await withPlex((base) =>
-          album ? fetchTracks(base, token, album, 'album') : fetchTracks(base, token, artist, 'artist'),
+          library
+            ? fetchTracks(base, token, section, 'library')
+            : album
+              ? fetchTracks(base, token, album, 'album')
+              : fetchTracks(base, token, artist, 'artist'),
         );
         send(res, 200, {
           tracks: trackStates(tracks),

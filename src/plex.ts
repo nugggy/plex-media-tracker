@@ -262,36 +262,84 @@ interface TrackMetadata extends PlexMetadata {
   duration?: number;
 }
 
+/** True when the item carries a lyrics stream (type 4, an lrc or txt sidecar). */
+export function hasLyricsStream(item: Pick<PlexMetadata, 'Media'>): boolean {
+  return (item.Media ?? []).some((m) =>
+    (m.Part ?? []).some((p) => (p.Stream ?? []).some((s) => s.streamType === 4)),
+  );
+}
+
+/** How many tracks one metadata request asks for. 173 keys answered in a third of a second. */
+const STREAM_BATCH = 100;
+
 /**
- * The tracks under one artist or one album, with whether Plex already has
- * lyrics for each. Checked against the real server: an album's children are
- * its tracks, and an artist's allLeaves are every track across its albums,
- * both carrying the streams, so "has lyrics" is a direct read.
+ * The tracks under one artist, one album, or a whole music library, with
+ * whether Plex already has lyrics for each.
+ *
+ * Checked against the real server on 29/09/2026: the list endpoints (an
+ * album's children, an artist's or a section's allLeaves) leave the streams
+ * out, whatever include parameter is sent, so a list alone cannot say whether
+ * a track has lyrics. A metadata request for several keys at once,
+ * /library/metadata/1,2,3, does carry them, so the list supplies the keys and
+ * batched metadata requests supply the streams. A library of 1,270 tracks is
+ * thirteen requests.
  */
 export async function fetchTracks(
   baseUrl: string,
   token: string,
   key: string,
-  kind: 'artist' | 'album',
+  kind: 'artist' | 'album' | 'library',
 ): Promise<PlexTrack[]> {
-  const data = await plexGet(
-    baseUrl,
-    token,
-    `/library/metadata/${key}/${kind === 'artist' ? 'allLeaves' : 'children'}`,
-  );
-  const items = (data.MediaContainer?.Metadata ?? []) as TrackMetadata[];
-  return items
-    .filter((i) => i.type === 'track' && i.ratingKey && i.title)
-    .map((i) => ({
-      rating_key: String(i.ratingKey),
-      title: String(i.title),
-      artist: String(i.grandparentTitle ?? ''),
-      album: i.parentTitle ?? null,
-      duration_ms: typeof i.duration === 'number' ? i.duration : null,
-      covered: (i.Media ?? []).some((m) =>
-        (m.Part ?? []).some((p) => (p.Stream ?? []).some((s) => s.streamType === 4)),
-      ),
-    }));
+  const items =
+    kind === 'library'
+      ? await listSectionLeaves(baseUrl, token, key)
+      : (((await plexGet(
+          baseUrl,
+          token,
+          `/library/metadata/${key}/${kind === 'artist' ? 'allLeaves' : 'children'}`,
+        )).MediaContainer?.Metadata ?? []) as TrackMetadata[]);
+  const tracks = items.filter((i) => i.type === 'track' && i.ratingKey && i.title);
+
+  const covered = new Set<string>();
+  for (let i = 0; i < tracks.length; i += STREAM_BATCH) {
+    const keys = tracks.slice(i, i + STREAM_BATCH).map((t) => String(t.ratingKey));
+    const data = await plexGet(baseUrl, token, `/library/metadata/${keys.join(',')}`);
+    for (const item of data.MediaContainer?.Metadata ?? []) {
+      if (item.ratingKey && hasLyricsStream(item)) covered.add(String(item.ratingKey));
+    }
+  }
+
+  return tracks.map((i) => ({
+    rating_key: String(i.ratingKey),
+    title: String(i.title),
+    artist: String(i.grandparentTitle ?? ''),
+    album: i.parentTitle ?? null,
+    duration_ms: typeof i.duration === 'number' ? i.duration : null,
+    covered: covered.has(String(i.ratingKey)),
+  }));
+}
+
+/** Every track in a music library, paged the way listSectionItems pages. */
+async function listSectionLeaves(
+  baseUrl: string,
+  token: string,
+  sectionKey: string,
+): Promise<TrackMetadata[]> {
+  const pageSize = 500;
+  const out: TrackMetadata[] = [];
+  let start = 0;
+  for (;;) {
+    const data = await plexGet(baseUrl, token, `/library/sections/${sectionKey}/allLeaves`, {
+      'X-Plex-Container-Start': String(start),
+      'X-Plex-Container-Size': String(pageSize),
+    });
+    const batch = (data.MediaContainer?.Metadata ?? []) as TrackMetadata[];
+    out.push(...batch);
+    if (batch.length < pageSize) break;
+    start += pageSize;
+    if (start > 200_000) break; // hard stop, something is wrong
+  }
+  return out;
 }
 
 export interface PlexTestResult {

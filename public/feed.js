@@ -404,6 +404,15 @@ export function dropFollowed(rows) {
  * nothing to find, so it is counted on its own and is neither stored nor
  * missing.
  */
+/**
+ * The Lyrics tab's Missing only toggle. Off, every track shows. On, only the
+ * tracks with no lyrics anywhere: not in Plex, not stored here, and not
+ * instrumental, since an instrumental has nothing to find.
+ */
+export function visibleLyricTracks(tracks, missingOnly) {
+  return missingOnly ? tracks.filter((t) => t.state === 'missing') : tracks;
+}
+
 export function lyricCounts(tracks) {
   const counts = { covered: 0, stored: 0, missing: 0, instrumental: 0, total: tracks.length };
   for (const t of tracks) {

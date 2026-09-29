@@ -297,6 +297,12 @@ main {
 .panel-head p {
   margin: 0;
 }
+.panel-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
 
 /* --------------------------------------------------------------- filters */
 
@@ -391,6 +397,22 @@ main {
   place-items: center;
   font-size: 26px;
   color: var(--muted);
+}
+
+/* Out now and Coming soon are about the artwork, so theirs is bigger. */
+#out-list .card,
+#upcoming-list .card {
+  grid-template-columns: 120px 1fr auto;
+}
+#out-list .art,
+#upcoming-list .art {
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+}
+#out-list .art-fallback,
+#upcoming-list .art-fallback {
+  font-size: 40px;
 }
 
 .card-title {
@@ -816,6 +838,15 @@ legend {
   .art {
     width: 60px;
     height: 60px;
+  }
+  #out-list .card,
+  #upcoming-list .card {
+    grid-template-columns: 92px 1fr;
+  }
+  #out-list .art,
+  #upcoming-list .art {
+    width: 92px;
+    height: 92px;
   }
   .field.narrow {
     grid-template-columns: 1fr;

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { lyricCounts } from '../public/feed.js';
+import { lyricCounts, visibleLyricTracks } from '../public/feed.js';
+import { hasLyricsStream } from '../src/plex.ts';
 
 process.env.PLEX_TRACKER_DATA_DIR = mkdtempSync(join(tmpdir(), 'pmt-lyrics-'));
 const {
@@ -153,4 +154,26 @@ test('the summary counts covered, stored and missing, with instrumentals as neit
     { state: 'missing' },
   ]);
   assert.deepEqual(counts, { covered: 2, stored: 1, missing: 1, instrumental: 1, total: 5 });
+});
+
+test('Missing only hides everything but the tracks with no lyrics anywhere', () => {
+  const tracks = [
+    { rating_key: '1', state: 'covered' },
+    { rating_key: '2', state: 'stored' },
+    { rating_key: '3', state: 'instrumental' },
+    { rating_key: '4', state: 'missing' },
+  ];
+  assert.deepEqual(visibleLyricTracks(tracks, false), tracks);
+  assert.deepEqual(visibleLyricTracks(tracks, true).map((t) => t.rating_key), ['4']);
+});
+
+/* --------------------------------------------------- reading Plex's streams */
+
+test('a track is covered only when a part carries a type 4 stream', () => {
+  const part = (...types: number[]) => ({ Stream: types.map((streamType) => ({ streamType })) });
+  assert.equal(hasLyricsStream({ Media: [{ Part: [part(2, 4)] }] }), true);
+  assert.equal(hasLyricsStream({ Media: [{ Part: [part(2)] }] }), false);
+  // The list endpoints leave the streams out altogether: that is unknown, not covered.
+  assert.equal(hasLyricsStream({ Media: [{ Part: [{}] }] }), false);
+  assert.equal(hasLyricsStream({}), false);
 });

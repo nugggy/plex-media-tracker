@@ -170,3 +170,22 @@ project.
 - Translating lyrics, or any other processing of them.
 - Lyrics for anything that is not a track in the local music library. The
   watchlist and the trending charts have no tracks.
+
+## Amended 29/09/2026
+
+Two things changed after the tab had been used.
+
+The list endpoints do not carry the streams after all. An album's children, an
+artist's allLeaves and a section's allLeaves all answer without any Stream
+array, whatever include parameter is sent, so read from a list alone every
+track looked Missing. A metadata request for several keys at once,
+`/library/metadata/1,2,3`, does carry them: 173 keys came back with their
+streams in a third of a second. `fetchTracks` now takes the keys from the list
+and the streams from batched metadata requests, one hundred keys a time. Read
+that way, Zach Bryan's 173 tracks are 94 covered, not 0.
+
+The tab can now look at the whole library, not only one artist. The section's
+allLeaves lists all 1,270 tracks, and with the stream batches the sweep takes
+about five seconds. A Missing only toggle hides every track that is covered,
+stored or instrumental, which is the report the feature was built for. It is a
+view filter only: the counts and Find lyrics still work on everything listed.

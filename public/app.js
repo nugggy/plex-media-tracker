@@ -22,6 +22,7 @@ import {
   filterSuggestionYears,
   dropFollowed,
   lyricCounts,
+  visibleLyricTracks,
   filterCatalogue,
 } from './feed.js';
 
@@ -72,7 +73,7 @@ const state = {
   gaps: null,
   library: null,
   machineId: null,
-  lyrics: { artistsLoaded: false, artist: '', album: '', tracks: [] },
+  lyrics: { artistsLoaded: false, artist: '', album: '', tracks: [], missingOnly: false },
   friends: {
     listLoaded: false,
     friend: 'all',
@@ -1625,6 +1626,7 @@ async function loadLyrics() {
     const select = $('#ly-artist');
     select.replaceChildren(
       el('option', { value: '' }, 'Choose an artist'),
+      el('option', { value: LYRICS_WHOLE_LIBRARY }, 'Whole library'),
       ...artists.map((a) => el('option', { value: a.plex_key }, a.name)),
     );
     ly.artistsLoaded = true;
@@ -1633,16 +1635,22 @@ async function loadLyrics() {
   }
 }
 
+/** The artist picker's value for every track in the music library. */
+const LYRICS_WHOLE_LIBRARY = '*';
+
 async function loadLyricTracks() {
   const ly = state.lyrics;
+  const wholeLibrary = ly.artist === LYRICS_WHOLE_LIBRARY;
   if (!ly.artist) {
     ly.tracks = [];
     renderLyrics();
     return;
   }
-  $('#ly-summary').textContent = 'Reading tracks from Plex…';
+  $('#ly-summary').textContent = wholeLibrary
+    ? 'Reading every track from Plex, this takes a few seconds…'
+    : 'Reading tracks from Plex…';
   try {
-    const params = ly.album ? { album: ly.album } : { artist: ly.artist };
+    const params = wholeLibrary ? { library: '1' } : ly.album ? { album: ly.album } : { artist: ly.artist };
     const r = await api(`/api/lyrics/tracks?${new URLSearchParams(params)}`);
     ly.tracks = r.tracks;
     if (!ly.album) {
@@ -1685,16 +1693,32 @@ function renderLyrics() {
         'div',
         { class: 'empty' },
         el('strong', {}, ly.artist ? 'No tracks' : 'Pick an artist'),
-        ly.artist ? 'Plex lists nothing under this choice.' : 'Then choose an album, or leave it on all albums.',
+        ly.artist
+          ? 'Plex lists nothing under this choice.'
+          : 'Or the whole library. Then choose an album, or leave it on all albums.',
       ),
     );
     return;
   }
-  for (const t of ly.tracks) list.append(lyricCard(t));
+  const visible = visibleLyricTracks(ly.tracks, ly.missingOnly);
+  if (visible.length === 0) {
+    list.append(
+      el(
+        'div',
+        { class: 'empty' },
+        el('strong', {}, 'Nothing missing'),
+        'Every track here has lyrics in Plex, is stored here, or is instrumental.',
+      ),
+    );
+    return;
+  }
+  const showArtist = ly.artist === LYRICS_WHOLE_LIBRARY;
+  for (const t of visible) list.append(lyricCard(t, showArtist));
 }
 
-function lyricCard(t) {
+function lyricCard(t, showArtist = false) {
   const card = el('article', { class: 'card' });
+  const under = showArtist ? [t.artist, t.album].filter(Boolean).join(' · ') : t.album || '';
   const tagClass = t.state === 'covered' ? 'tag held' : t.state === 'stored' ? 'tag part-held' : 'tag';
   const minutes = t.duration_ms ? `${Math.floor(t.duration_ms / 60000)}:${String(Math.round((t.duration_ms % 60000) / 1000)).padStart(2, '0')}` : null;
   card.append(
@@ -1703,7 +1727,7 @@ function lyricCard(t) {
       'div',
       {},
       el('p', { class: 'card-title' }, t.title),
-      el('p', { class: 'card-artist' }, t.album || ''),
+      el('p', { class: 'card-artist' }, under),
       el(
         'div',
         { class: 'card-meta' },
@@ -1806,8 +1830,19 @@ function togglePaste(t, card) {
 $('#ly-artist').addEventListener('change', (e) => {
   state.lyrics.artist = e.target.value;
   state.lyrics.album = '';
-  $('#ly-album').value = '';
+  const albumSelect = $('#ly-album');
+  albumSelect.value = '';
+  // The whole library has no single artist to list albums for.
+  if (state.lyrics.artist === LYRICS_WHOLE_LIBRARY) {
+    albumSelect.replaceChildren(el('option', { value: '' }, 'All albums'));
+    albumSelect.disabled = true;
+  }
   loadLyricTracks();
+});
+
+$('#ly-missing-only').addEventListener('change', (e) => {
+  state.lyrics.missingOnly = e.target.checked;
+  renderLyrics();
 });
 
 $('#ly-album').addEventListener('change', (e) => {

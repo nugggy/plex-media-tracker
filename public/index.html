@@ -436,11 +436,17 @@
             Which tracks in your music library have no lyrics. Found lyrics are kept here, in the
             app, and nothing is written to the library.
           </p>
-          <button type="button" class="btn" id="ly-fetch" disabled>Find lyrics</button>
+          <div class="panel-tools">
+            <label class="check">
+              <input type="checkbox" id="ly-missing-only" /> Missing only
+            </label>
+            <button type="button" class="btn" id="ly-fetch" disabled>Find lyrics</button>
+          </div>
         </div>
         <div class="filters">
           <select class="input" id="ly-artist" aria-label="Artist">
             <option value="">Choose an artist</option>
+            <option value="*">Whole library</option>
           </select>
           <select class="input" id="ly-album" aria-label="Album" disabled>
             <option value="">All albums</option>

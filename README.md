@@ -149,10 +149,12 @@ is ticked to start with so the list is what is new to you. **Add to watchlist**
 puts it on your real Plex watchlist, the same as Search does.
 
 **Lyrics** shows which tracks in your music library have no lyrics. Pick an
-artist, and an album if you like, and each track is marked In Plex when Plex
-already carries a lyrics stream for it, Stored here when this app holds one,
-Instrumental, or Missing. **Find lyrics** asks LRCLIB about every missing track
-in the view. It needs no key. The exact lookup by artist, title, album and
+artist, and an album if you like, or choose Whole library to see every track,
+and each track is marked In Plex when Plex already carries a lyrics stream for
+it, Stored here when this app holds one, Instrumental, or Missing. Tick
+**Missing only** to hide everything else, so the whole library boils down to
+the songs still without lyrics anywhere. **Find lyrics** asks LRCLIB about
+every missing track in the view. It needs no key. The exact lookup by artist, title, album and
 length comes first, and a search by artist and title stands in when that
 misses, but a result is only accepted from the same artist and within three
 seconds of the track's length, because no lyric is better than the wrong one.
