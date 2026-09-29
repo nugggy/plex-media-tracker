@@ -35,9 +35,15 @@ forty minutes.
 The progress strip says which step is running. You can press Stop at any point
 and everything done so far is saved.
 
-Step 1 also runs on its own each time the app starts, so opening the dashboard
+Step 1 also runs on its own when the app starts, so opening the dashboard
 shows current watchlist and episode information without you pressing anything.
-Turn that off in Settings if you would rather it did not.
+It is skipped when a full refresh finished cleanly in the last two hours, which
+keeps the phone from re-syncing every time it is opened. Turn it off in
+Settings if you would rather it did not run at all.
+
+A start-up refresh only rewalks a show's episodes when the watchlist says its
+last episode date moved, or when it has not been walked for twelve hours.
+Pressing a refresh button, or Check for updates, walks every show.
 
 ## The tabs
 

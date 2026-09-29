@@ -219,6 +219,49 @@ export interface EpisodeSyncResult {
   failed: number;
   /** Episodes whose Sydney date came from a real air time rather than a guess. */
   timed: number;
+  /** Shows left alone because a recent walk saw nothing new. */
+  skipped: number;
+}
+
+/* ------------------------------------------------------- walk bookkeeping */
+
+/**
+ * How long a walk stands. Walking every continuing show on every refresh was
+ * the slowest part by far, four requests a show, and a show's schedule does
+ * not change by the hour. Within the gap a show is only rewalked when the
+ * watchlist says its last episode date moved.
+ */
+export const WALK_GAP_MS = 12 * 3_600_000;
+
+export interface ShowWalk {
+  walked_at: string;
+  last_episode_at: string | null;
+}
+
+export function showDueForWalk(
+  walk: ShowWalk | undefined,
+  lastEpisodeAt: string | null,
+  now: number = Date.now(),
+): boolean {
+  if (!walk) return true;
+  if (walk.last_episode_at !== lastEpisodeAt) return true;
+  const age = now - Date.parse(walk.walked_at);
+  return Number.isNaN(age) || age < 0 || age > WALK_GAP_MS;
+}
+
+export function lastWalk(showKey: string): ShowWalk | undefined {
+  const row = db
+    .prepare('SELECT walked_at, last_episode_at FROM show_walks WHERE show_key = ?')
+    .get(showKey) as ShowWalk | undefined;
+  return row ? { walked_at: row.walked_at, last_episode_at: row.last_episode_at } : undefined;
+}
+
+export function recordWalk(showKey: string, lastEpisodeAt: string | null, at: string = nowIso()): void {
+  db.prepare(
+    `INSERT INTO show_walks (show_key, walked_at, last_episode_at) VALUES (?, ?, ?)
+     ON CONFLICT(show_key) DO UPDATE SET
+       walked_at = excluded.walked_at, last_episode_at = excluded.last_episode_at`,
+  ).run(showKey, at, lastEpisodeAt);
 }
 
 /**
@@ -227,18 +270,34 @@ export interface EpisodeSyncResult {
  */
 export async function syncEpisodes(
   onProgress?: (m: string) => void,
+  force = false,
 ): Promise<EpisodeSyncResult> {
   const token = store.getSetting('plex_token');
-  const result: EpisodeSyncResult = { shows: 0, episodes: 0, added: 0, failed: 0, timed: 0 };
+  const result: EpisodeSyncResult = {
+    shows: 0,
+    episodes: 0,
+    added: 0,
+    failed: 0,
+    timed: 0,
+    skipped: 0,
+  };
   if (!token) return result;
 
-  const shows = db
+  const listed = db
     .prepare(
-      `SELECT rating_key, title FROM watchlist_items
+      `SELECT rating_key, title, last_episode_at FROM watchlist_items
        WHERE type = 'show' AND state = 'listed' AND continuing = 1
        ORDER BY last_episode_at DESC`,
     )
-    .all() as { rating_key: string; title: string }[];
+    .all() as { rating_key: string; title: string; last_episode_at: string | null }[];
+
+  // A pressed button means a real check; a start-up refresh only walks what
+  // could have changed.
+  const shows = listed.filter((s) => {
+    if (force || showDueForWalk(lastWalk(s.rating_key), s.last_episode_at)) return true;
+    result.skipped += 1;
+    return false;
+  });
 
   // Two requests per show, serialised, was the slowest part of a refresh by a
   // wide margin. A handful of workers share the queue, each keeping its own
@@ -297,6 +356,7 @@ export async function syncEpisodes(
           }
         }
         result.shows += 1;
+        recordWalk(show.rating_key, show.last_episode_at);
       } catch {
         result.failed += 1;
       }
@@ -305,14 +365,12 @@ export async function syncEpisodes(
   await Promise.all(Array.from({ length: WORKERS }, worker));
 
   // Episodes of shows no longer on the watchlist are not worth keeping.
-  db.exec(
-    `DELETE FROM episodes WHERE show_key NOT IN
-       (SELECT rating_key FROM watchlist_items WHERE state = 'listed')`,
-  );
-  db.exec(
-    `DELETE FROM show_air_sources WHERE show_key NOT IN
-       (SELECT rating_key FROM watchlist_items WHERE state = 'listed')`,
-  );
+  for (const table of ['episodes', 'show_air_sources', 'show_walks']) {
+    db.exec(
+      `DELETE FROM ${table} WHERE show_key NOT IN
+         (SELECT rating_key FROM watchlist_items WHERE state = 'listed')`,
+    );
+  }
   return result;
 }
 

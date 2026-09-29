@@ -20,6 +20,10 @@ import { syncEpisodes, syncLocalEpisodes, type EpisodeSyncResult } from './episo
 import { syncFilmDates } from './tmdb.ts';
 import { fetchMachineId } from './library.ts';
 import { ensurePlexUrl, withPlex } from './plexconnect.ts';
+import { nowIso } from './dates.ts';
+import { runRefreshPlan, ALL_PARTS, type RefreshPart } from './refreshplan.ts';
+
+export { ALL_PARTS, type RefreshPart };
 
 /**
  * A sync that wants to push more removals than this has almost certainly gone
@@ -138,20 +142,8 @@ export async function syncWatchlist(
     result.added += 1;
   }
 
-  // Which of these are already on the server.
-  onProgress?.('Checking what is already in your library');
-  try {
-    await withPlex(async (url) => {
-      const sections = await listVideoSections(url, token);
-      if (sections.length > 0) {
-        const guids = await fetchLibraryGuids(url, token, sections);
-        wl.replaceLibraryGuids(guids);
-      }
-    });
-  } catch {
-    // The local server being unreachable must not fail the whole sync; the
-    // in_library flags simply stay as they were.
-  }
+  // Which of these are already on the server, going by the last library read.
+  // The holdings part of a refresh is what re-reads the server.
   result.inLibrary = wl.refreshInLibraryFlags();
 
   return result;
@@ -238,22 +230,30 @@ export interface RefreshResult {
 }
 
 /**
+ * Several parts report at once, so the strip shows every part still running,
+ * joined, rather than whichever spoke last.
+ */
+function progressBoard(onProgress?: (m: string) => void) {
+  const lines = new Map<string, string>();
+  return (part: string) => (m: string | null) => {
+    if (m === null) lines.delete(part);
+    else lines.set(part, m);
+    onProgress?.([...lines.values()].join(' · '));
+  };
+}
+
+/**
  * The quick pass: re-read what Plex holds, drop anything from the lists that has
  * since arrived, and sync the watchlist. No MusicBrainz, so it takes seconds
  * rather than the half hour a full scan needs.
+ *
+ * `force` walks every show's schedule rather than only those that could have
+ * changed. A pressed button forces; the start-up sync does not.
  */
-/**
- * The named pieces of a refresh. Measured against a real library: holdings and
- * watchlist are seconds because they are LAN or a handful of plex.tv calls;
- * schedules walks two requests per continuing show and is the slow one.
- */
-export type RefreshPart = 'holdings' | 'watchlist' | 'schedules' | 'filmdates';
-
-export const ALL_PARTS: RefreshPart[] = ['holdings', 'watchlist', 'schedules', 'filmdates'];
-
 export async function refreshLibraryState(
   onProgress?: (m: string) => void,
   parts: RefreshPart[] = ALL_PARTS,
+  force = false,
 ): Promise<RefreshResult> {
   const want = new Set(parts);
   const settings = store.getSettings();
@@ -265,101 +265,130 @@ export async function refreshLibraryState(
     episodes: null,
     message: '',
   };
+  let failures = 0;
+  const failed = (note: string): void => {
+    failures += 1;
+    result.message += `${note} `;
+  };
+  const board = progressBoard(onProgress);
 
-  if (want.has('holdings')) {
-    // In automatic mode, work out where the server is from here before
-    // anything talks to it. Manual mode keeps the saved address.
-    onProgress?.('Finding your Plex server');
-    try {
-      const relayNote = await ensurePlexUrl();
-      if (relayNote) {
-        onProgress?.(relayNote);
-        result.message += `${relayNote} `;
-      }
-    } catch (err) {
-      result.message += `${(err as Error).message} `;
-    }
-
-    onProgress?.('Re-reading your Plex music library');
-    try {
-      if (settings.plex_section) {
-        const albums = await withPlex((url) =>
-          fetchAlbums(url, settings.plex_token, settings.plex_section),
-        );
-        store.replacePlexAlbums(albums);
-        result.owned = store.refreshOwnedFlags();
-      }
-    } catch (err) {
-      result.message += `Music library check failed: ${(err as Error).message}. `;
-    }
-
-    // The server id is what makes a deep link back into Plex possible.
-    try {
-      const machine = await fetchMachineId(store.getSetting('plex_url'), settings.plex_token);
-      if (machine) store.setSetting('plex_machine_id', machine);
-    } catch {
-      // Without it, links are simply not offered.
-    }
-
-    onProgress?.('Checking films and shows already on the server');
-    try {
-      await withPlex(async (url) => {
-        const sections = await listVideoSections(url, settings.plex_token);
-        if (sections.length > 0) {
-          const guids = await fetchLibraryGuids(url, settings.plex_token, sections);
-          wl.replaceLibraryGuids(guids);
-        }
-        const showSections = sections.filter((x) => x.type === 'show').map((x) => x.key);
-        if (showSections.length > 0) {
-          result.heldEpisodes = await syncLocalEpisodes(
-            url,
-            settings.plex_token,
-            showSections,
-            onProgress,
-          );
-        }
-      });
-    } catch (err) {
-      result.message += `Film and TV check failed: ${(err as Error).message}. `;
-    }
+  if (settings.watchlist_enabled !== '1') {
+    for (const part of ['watchlist', 'schedules', 'filmdates'] as const) want.delete(part);
   }
+
+  await runRefreshPlan(
+    {
+      async holdings() {
+        const say = board('holdings');
+        // In automatic mode, work out where the server is from here before
+        // anything talks to it. Manual mode keeps the saved address.
+        say('Finding your Plex server');
+        try {
+          const relayNote = await ensurePlexUrl();
+          if (relayNote) {
+            say(relayNote);
+            result.message += `${relayNote} `;
+          }
+        } catch (err) {
+          failed((err as Error).message);
+        }
+
+        say('Re-reading your Plex music library');
+        try {
+          if (settings.plex_section) {
+            const albums = await withPlex((url) =>
+              fetchAlbums(url, settings.plex_token, settings.plex_section),
+            );
+            store.replacePlexAlbums(albums);
+            result.owned = store.refreshOwnedFlags();
+          }
+        } catch (err) {
+          failed(`Music library check failed: ${(err as Error).message}.`);
+        }
+
+        // The server id is what makes a deep link back into Plex possible.
+        try {
+          const machine = await fetchMachineId(store.getSetting('plex_url'), settings.plex_token);
+          if (machine) store.setSetting('plex_machine_id', machine);
+        } catch {
+          // Without it, links are simply not offered.
+        }
+
+        say('Checking films and shows already on the server');
+        try {
+          await withPlex(async (url) => {
+            const sections = await listVideoSections(url, settings.plex_token);
+            if (sections.length > 0) {
+              const guids = await fetchLibraryGuids(url, settings.plex_token, sections);
+              wl.replaceLibraryGuids(guids);
+            }
+            const showSections = sections.filter((x) => x.type === 'show').map((x) => x.key);
+            if (showSections.length > 0) {
+              result.heldEpisodes = await syncLocalEpisodes(
+                url,
+                settings.plex_token,
+                showSections,
+                say,
+              );
+            }
+          });
+        } catch (err) {
+          failed(`Film and TV check failed: ${(err as Error).message}.`);
+        }
+        say(null);
+      },
+      async watchlist() {
+        const say = board('watchlist');
+        try {
+          result.watchlist = await syncWatchlist(say);
+        } catch (err) {
+          failed(`Watchlist sync failed: ${(err as Error).message}.`);
+        }
+        say(null);
+      },
+      async schedules() {
+        const say = board('schedules');
+        try {
+          result.episodes = await syncEpisodes(say, force);
+        } catch (err) {
+          failed(`Episode check failed: ${(err as Error).message}.`);
+        }
+        say(null);
+      },
+      async filmdates() {
+        const say = board('filmdates');
+        try {
+          const films = await syncFilmDates(say);
+          if (!films.skipped) result.message += `${films.message} `;
+        } catch (err) {
+          failed(`Film date check failed: ${(err as Error).message}.`);
+        }
+        say(null);
+      },
+    },
+    want,
+  );
+
+  // Flags depend on both the library read and the watchlist, so once, at the end.
   result.inLibrary = wl.refreshInLibraryFlags();
 
-  if (settings.watchlist_enabled === '1') {
-    if (want.has('watchlist')) {
-      try {
-        result.watchlist = await syncWatchlist(onProgress);
-        result.inLibrary = wl.refreshInLibraryFlags();
-      } catch (err) {
-        result.message += `Watchlist sync failed: ${(err as Error).message}. `;
-      }
-    }
-    if (want.has('schedules')) {
-      try {
-        result.episodes = await syncEpisodes(onProgress);
-      } catch (err) {
-        result.message += `Episode check failed: ${(err as Error).message}. `;
-      }
-    }
-    if (want.has('filmdates')) {
-      try {
-        const films = await syncFilmDates(onProgress);
-        if (!films.skipped) result.message += `${films.message} `;
-      } catch (err) {
-        result.message += `Film date check failed: ${(err as Error).message}. `;
-      }
-    }
+  // Only a clean run of everything lets the next start skip its own sync.
+  if (failures === 0 && ALL_PARTS.every((p) => want.has(p))) {
+    store.setSetting('last_refresh_at', nowIso());
   }
 
   const w = result.watchlist;
+  const e = result.episodes;
   result.message =
     result.message +
     `${result.owned} releases already held, ${result.inLibrary} watchlist items and ` +
     `${result.heldEpisodes} episodes on the server` +
     (w ? `, ${w.total} watchlist items (${w.added} new, ${w.removedInPlex} removed in Plex)` : '') +
-    (result.episodes
-      ? `, ${result.episodes.episodes} episodes across ${result.episodes.shows} continuing shows ` +
-        `(${result.episodes.timed} with a confirmed air time).`
+    (e
+      ? `, ${e.episodes} episodes across ${e.shows} continuing shows ` +
+        `(${e.timed} with a confirmed air time` +
+        (e.skipped ? `, ${e.skipped} shows unchanged since last time` : '') +
+        ').'
       : '.');
   return result;
 }

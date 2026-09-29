@@ -139,15 +139,40 @@ export async function probeIdentity(
 
 /**
  * Tries every address at once and keeps the most preferred one that answered.
- * One after another would mean waiting out each dead LAN address in turn.
+ * One after another would mean waiting out each dead LAN address in turn, and
+ * waiting for every probe would mean the answer arriving no sooner than the
+ * slowest timeout. So the pick is made the moment the best address has said
+ * yes and everything ranked above it has said no.
  */
-export async function pickConnection(
+export function pickConnection(
   ordered: PlexConnection[],
   probe: (c: PlexConnection) => Promise<boolean>,
 ): Promise<PlexConnection | null> {
-  const answers = await Promise.all(ordered.map((c) => probe(c).catch(() => false)));
-  const index = answers.findIndex(Boolean);
-  return index === -1 ? null : ordered[index];
+  if (ordered.length === 0) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const answers: (boolean | undefined)[] = new Array(ordered.length).fill(undefined);
+    let decided = false;
+    const decide = (): void => {
+      for (let i = 0; i < ordered.length; i += 1) {
+        if (answers[i] === undefined) return; // still waiting on a better one
+        if (answers[i]) {
+          decided = true;
+          resolve(ordered[i]!);
+          return;
+        }
+      }
+      decided = true;
+      resolve(null);
+    };
+    ordered.forEach((c, i) => {
+      probe(c)
+        .catch(() => false)
+        .then((answer) => {
+          answers[i] = answer;
+          if (!decided) decide();
+        });
+    });
+  });
 }
 
 export async function listServers(token: string): Promise<PlexServer[]> {

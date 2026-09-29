@@ -163,6 +163,15 @@ CREATE TABLE IF NOT EXISTS show_air_sources (
   checked_at TEXT NOT NULL
 );
 
+-- When each continuing show's episodes were last walked, and the last episode
+-- date the watchlist showed at the time. A show walked recently whose date
+-- has not moved is left alone on the next refresh.
+CREATE TABLE IF NOT EXISTS show_walks (
+  show_key        TEXT PRIMARY KEY,
+  walked_at       TEXT NOT NULL,
+  last_episode_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS youtube_cache (
   query      TEXT PRIMARY KEY,
   video_id   TEXT,
@@ -204,6 +213,8 @@ const DEFAULTS: Record<string, string> = {
   include_show: '1',
   watchlist_enabled: '1',
   sync_on_start: '1',
+  /** When the last full quick refresh finished cleanly. A start within two hours of it skips its own. */
+  last_refresh_at: '',
   tmdb_api_key: '',
   plex_machine_id: '',
   plex_video_sections: '',

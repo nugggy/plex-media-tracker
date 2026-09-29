@@ -334,7 +334,7 @@ export async function handleApi(
       }
       const parts = JOBS[job];
       if (!parts) return bad(res, `Unknown refresh job: ${job}`);
-      void runRefresh(parts);
+      void runRefresh(parts, true);
       send(res, 202, { started: true, job });
       return true;
     }
@@ -344,7 +344,7 @@ export async function handleApi(
         return bad(res, 'Something is already running. Wait for it to finish.');
       }
       // Not awaited: a refresh takes minutes, so the page polls /api/state.
-      void runRefresh();
+      void runRefresh(undefined, true);
       send(res, 202, { started: true });
       return true;
     }

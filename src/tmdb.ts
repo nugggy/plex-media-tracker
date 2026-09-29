@@ -124,7 +124,30 @@ export interface FilmDateSync {
 }
 
 /** Re-check a film at most weekly: a pending digital date can appear any time. */
-const STALE_DAYS = 7;
+/** A film with a digital date known is re-asked this often, in case it moves. */
+export const DATED_RECHECK_DAYS = 7;
+/**
+ * One without is re-asked sooner, since a date can appear any day. Once a day
+ * rather than every refresh: most of a watchlist has no digital date for
+ * months, and asking TMDB about all of it on every start was the second
+ * slowest part of a refresh.
+ */
+export const UNDATED_RECHECK_DAYS = 1;
+
+/** Listed films whose dates are unknown or have gone stale. */
+export function filmsDueForDates(now: number = Date.now()): { rating_key: string; title: string }[] {
+  const datedCutoff = new Date(now - DATED_RECHECK_DAYS * 86_400_000).toISOString();
+  const undatedCutoff = new Date(now - UNDATED_RECHECK_DAYS * 86_400_000).toISOString();
+  return db
+    .prepare(
+      `SELECT w.rating_key, w.title FROM watchlist_items w
+       LEFT JOIN film_dates f ON f.rating_key = w.rating_key
+       WHERE w.type = 'movie' AND w.state = 'listed'
+         AND (f.checked_at IS NULL
+              OR f.checked_at < CASE WHEN f.digital_date IS NULL THEN ? ELSE ? END)`,
+    )
+    .all(undatedCutoff, datedCutoff) as { rating_key: string; title: string }[];
+}
 
 export async function syncFilmDates(
   onProgress?: (m: string) => void,
@@ -145,15 +168,7 @@ export async function syncFilmDates(
     return result;
   }
 
-  const cutoff = new Date(Date.now() - STALE_DAYS * 86_400_000).toISOString();
-  const films = db
-    .prepare(
-      `SELECT w.rating_key, w.title FROM watchlist_items w
-       LEFT JOIN film_dates f ON f.rating_key = w.rating_key
-       WHERE w.type = 'movie' AND w.state = 'listed'
-         AND (f.checked_at IS NULL OR f.checked_at < ? OR f.digital_date IS NULL)`,
-    )
-    .all(cutoff) as { rating_key: string; title: string }[];
+  const films = filmsDueForDates();
 
   for (let i = 0; i < films.length; i += 1) {
     const film = films[i]!;

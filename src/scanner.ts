@@ -100,9 +100,13 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     if (!skipQuickRefresh) {
       Object.assign(progress, { phase: 'refresh', done: 0, total: 0 });
       try {
-        const quick = await refreshLibraryState((m) => {
-          progress.current = m;
-        });
+        const quick = await refreshLibraryState(
+          (m) => {
+            progress.current = m;
+          },
+          undefined,
+          true,
+        );
         watchlistNote = quick.watchlist?.blocked ?? quick.message;
       } catch (err) {
         // A failure here must not stop the music scan.
@@ -319,9 +323,11 @@ function isCurrent(date: string | null): boolean {
 
 /**
  * The quick pass, sharing the scan's progress object so it shows in the same
- * strip and cannot run at the same time as a full scan.
+ * strip and cannot run at the same time as a full scan. `force` is for a
+ * pressed button: every show's schedule is walked, not only the ones that
+ * could have changed.
  */
-export async function runRefresh(parts?: RefreshPart[]): Promise<Progress> {
+export async function runRefresh(parts?: RefreshPart[], force = false): Promise<Progress> {
   if (progress.running) return getProgress();
   if (!store.isConfigured()) {
     Object.assign(progress, {
@@ -345,9 +351,13 @@ export async function runRefresh(parts?: RefreshPart[]): Promise<Progress> {
   scanHooks.onStart();
 
   try {
-    const result = await refreshLibraryState((m) => {
-      progress.current = m;
-    }, parts);
+    const result = await refreshLibraryState(
+      (m) => {
+        progress.current = m;
+      },
+      parts,
+      force,
+    );
     Object.assign(progress, {
       running: false,
       phase: 'done',

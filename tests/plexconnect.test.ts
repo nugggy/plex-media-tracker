@@ -154,6 +154,34 @@ test('nothing answering gives no connection', async () => {
   assert.equal(await pickConnection([LOCAL, REMOTE], async () => false), null);
 });
 
+const NEVER = new Promise<boolean>(() => {});
+
+test('the best address answering is taken at once, without waiting on the rest', async () => {
+  const picked = await pickConnection([LOCAL, REMOTE, RELAY], (c) =>
+    c === LOCAL ? Promise.resolve(true) : NEVER,
+  );
+  assert.equal(picked?.uri, LOCAL.uri);
+});
+
+test('a lower address is taken once every address above it has said no', async () => {
+  const picked = await pickConnection([LOCAL, REMOTE, RELAY], (c) =>
+    c === RELAY ? NEVER : Promise.resolve(c === REMOTE),
+  );
+  assert.equal(picked?.uri, REMOTE.uri);
+});
+
+test('a lower address answering first still waits for the one above it', async () => {
+  let localAsked = false;
+  const picked = await pickConnection([LOCAL, REMOTE], async (c) => {
+    if (c === REMOTE) return true;
+    await new Promise((r) => setTimeout(r, 20));
+    localAsked = true;
+    return true;
+  });
+  assert.equal(localAsked, true);
+  assert.equal(picked?.uri, LOCAL.uri);
+});
+
 test('addresses are tried together, not one after another', async () => {
   let inFlight = 0;
   let peak = 0;
