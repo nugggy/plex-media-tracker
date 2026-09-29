@@ -5,6 +5,8 @@ import {
   orderConnections,
   pickConnection,
   probeIdentity,
+  probeOutcome,
+  describeNoAnswer,
   resourcesUrl,
   retryOnUnreachable,
   type PlexConnection,
@@ -216,6 +218,47 @@ test('an address that errors or refuses does not answer', async () => {
     throw new TypeError('fetch failed');
   }) as typeof fetch;
   assert.equal(await probeIdentity(LOCAL.uri, 'abc123', refused), false);
+});
+
+/*
+ * When nothing answers, the reason per address is what tells a phone at home
+ * apart from a phone away, so the message names every address and why it
+ * failed instead of only saying that none answered.
+ */
+test('each address reports why it did not answer', async () => {
+  const timeout = (async () => {
+    throw Object.assign(new Error('The operation was aborted due to timeout'), {
+      name: 'TimeoutError',
+    });
+  }) as typeof fetch;
+  const refused = (async () => {
+    throw new TypeError('fetch failed');
+  }) as typeof fetch;
+  assert.equal(await probeOutcome(LOCAL.uri, 'abc123', timeout), 'no answer in 5 s');
+  assert.equal(await probeOutcome(LOCAL.uri, 'abc123', refused), 'could not connect');
+  assert.equal(await probeOutcome(LOCAL.uri, 'abc123', fakeFetch(401, {})), 'HTTP 401');
+  assert.equal(
+    await probeOutcome(LOCAL.uri, 'other', fakeFetch(200, { MediaContainer: { machineIdentifier: 'abc123' } })),
+    'a different server',
+  );
+  assert.equal(
+    await probeOutcome(LOCAL.uri, 'abc123', fakeFetch(200, { MediaContainer: { machineIdentifier: 'abc123' } })),
+    'ok',
+  );
+});
+
+test('the failure message lists every address with its reason, in the order tried', () => {
+  const message = describeNoAnswer('Lounge', [
+    { uri: 'https://192-168-1-10.8b09d56f474443b5b65e099d47345d0c.plex.direct:32400', outcome: 'could not connect' },
+    { uri: 'http://192.168.1.10:32400', outcome: 'no answer in 5 s' },
+    { uri: 'https://203-0-113-5.8b09d56f474443b5b65e099d47345d0c.plex.direct:32400', outcome: 'HTTP 401' },
+  ]);
+  assert.match(message, /^Lounge did not answer at any of its addresses\./);
+  assert.match(message, /192-168-1-10\.….plex\.direct:32400: could not connect/);
+  assert.match(message, /192\.168\.1\.10:32400: no answer in 5 s/);
+  assert.match(message, /203-0-113-5\.….plex\.direct:32400: HTTP 401/);
+  assert.ok(message.indexOf('192-168-1-10') < message.indexOf('192.168.1.10'));
+  assert.ok(!message.includes('8b09d56f'));
 });
 
 test('losing the server partway through finds the new address and tries again', async () => {

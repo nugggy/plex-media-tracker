@@ -124,17 +124,47 @@ export async function probeIdentity(
   machineId: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<boolean> {
+  return (await probeOutcome(uri, machineId, fetchFn)) === 'ok';
+}
+
+/** 'ok', or a short reason a person can act on. */
+export async function probeOutcome(
+  uri: string,
+  machineId: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<string> {
   try {
     const res = await fetchFn(`${uri.replace(/\/+$/, '')}/identity`, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    if (!res.ok) return false;
+    if (!res.ok) return `HTTP ${res.status}`;
     const data = (await res.json()) as { MediaContainer?: { machineIdentifier?: string } };
-    return data.MediaContainer?.machineIdentifier === machineId;
-  } catch {
-    return false;
+    return data.MediaContainer?.machineIdentifier === machineId ? 'ok' : 'a different server';
+  } catch (err) {
+    return (err as Error).name === 'TimeoutError'
+      ? `no answer in ${PROBE_TIMEOUT_MS / 1000} s`
+      : 'could not connect';
   }
+}
+
+/**
+ * The message when nothing answered. Every address and its reason, in the
+ * order tried, because "none answered" alone cannot tell a phone at home
+ * whose DNS refuses plex.direct from a server that is switched off. The long
+ * server id inside a plex.direct name is shortened to keep the list readable.
+ */
+export function describeNoAnswer(
+  serverName: string,
+  tried: { uri: string; outcome: string }[],
+): string {
+  const short = (uri: string) =>
+    uri.replace(/^https?:\/\//, '').replace(/\.[0-9a-f]{32}\.plex\.direct/, '.….plex.direct');
+  const lines = tried.map((t) => `${short(t.uri)}: ${t.outcome}`).join('; ');
+  return (
+    `${serverName} did not answer at any of its addresses. Tried ${lines}. ` +
+    'Check the server is switched on and that Remote Access in Plex says it is fully accessible outside your network.'
+  );
 }
 
 /**
@@ -210,12 +240,19 @@ export async function resolveServer(token: string, machineId: string): Promise<R
       'That server is no longer on your Plex account. Pick it again in Settings.',
     );
   }
-  const picked = await pickConnection(orderConnections(server.connections), (c) =>
-    probeIdentity(c.uri, machineId),
-  );
+  const ordered = orderConnections(server.connections);
+  const outcomes = new Map<string, string>();
+  const picked = await pickConnection(ordered, async (c) => {
+    const outcome = await probeOutcome(c.uri, machineId);
+    outcomes.set(c.uri, outcome);
+    return outcome === 'ok';
+  });
   if (!picked) {
     throw new ConnectError(
-      `${server.name} did not answer at any of its addresses. Check the server is switched on and that Remote Access in Plex says it is fully accessible outside your network.`,
+      describeNoAnswer(
+        server.name,
+        ordered.map((c) => ({ uri: c.uri, outcome: outcomes.get(c.uri) ?? 'not tried' })),
+      ),
     );
   }
   return { url: picked.uri, kind: kindOf(picked), serverName: server.name };
