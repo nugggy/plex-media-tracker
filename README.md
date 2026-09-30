@@ -47,6 +47,11 @@ Pressing a refresh button, or Check for updates, walks every show.
 
 ## The tabs
 
+Seven tabs run along the top: Out now, Coming soon, Dashboard, Following,
+Discover, Library and Settings. Following, Discover and Library each hold a
+few views, picked by a switch at the top of the page, and each remembers the
+view you last had open.
+
 **Out now** is what has landed recently. It opens on the whole window the app
 tracks, which is the "treat a release as recent for" setting, so the list and
 the number on the tab cover the same period. It also opens with **Hide what I
@@ -82,6 +87,9 @@ row is usually just the newest announced. A badge always sits beside the episode
 it describes, so a collapsed run of several episodes carries none of its own:
 open the row to see which episode is the premiere or the finale.
 
+**Following** holds what the app tracks for you, in three views: Watchlist,
+Artists and Search.
+
 **Watchlist** is your Plex watchlist, 309 items at last count. Removing here
 removes it from Plex as well, and removing it in Plex removes it here. There is
 an undo for the last removal.
@@ -94,6 +102,9 @@ sharing a name or paste a MusicBrainz ID. Mute stops watching someone.
 **Details** on a film or show opens the synopsis, cast, director, runtime and
 genres in the card. That comes from Plex and needs no key. On the rare title
 where Plex lists no cast, a TMDB key fills the actors in.
+
+**Discover** is for finding things you do not follow yet, in three views:
+Suggestions, Trending and Friends.
 
 **Suggestions** are built from what you already own. Artists come from
 ListenBrainz similar-artists, which needs no key. Films come from TMDB
@@ -147,6 +158,10 @@ names on it; pick one friend to see only theirs. Each row says when the title
 is already on your own watchlist or on your server, and **Hide what I have**
 is ticked to start with so the list is what is new to you. **Add to watchlist**
 puts it on your real Plex watchlist, the same as Search does.
+
+**Library** is housekeeping on what is already on your server: missing
+episodes, duplicate files and films worth upgrading. It has a second view,
+Lyrics.
 
 **Lyrics** shows which tracks in your music library have no lyrics. Pick an
 artist, and an album if you like, or choose Whole library to see every track,

@@ -53,21 +53,12 @@
       <button class="tab" data-tab="upcoming" role="tab">
         Coming soon <span class="pill" id="count-upcoming">0</span>
       </button>
-      <button class="tab" data-tab="watchlist" role="tab">
-        Watchlist <span class="pill" id="count-watchlist">0</span>
-      </button>
-      <button class="tab" data-tab="artists" role="tab">
-        Artists <span class="pill" id="count-artists">0</span>
-      </button>
-      <button class="tab" data-tab="search" role="tab">Search</button>
       <button class="tab" data-tab="dash" role="tab">
         Dashboard <span class="pill" id="count-streams" hidden>0</span>
       </button>
+      <button class="tab" data-tab="following" role="tab">Following</button>
+      <button class="tab" data-tab="discover" role="tab">Discover</button>
       <button class="tab" data-tab="library" role="tab">Library</button>
-      <button class="tab" data-tab="suggestions" role="tab">Suggestions</button>
-      <button class="tab" data-tab="trending" role="tab">Trending</button>
-      <button class="tab" data-tab="friends" role="tab">Friends</button>
-      <button class="tab" data-tab="lyrics" role="tab">Lyrics</button>
       <button class="tab" data-tab="settings" role="tab">Settings</button>
     </nav>
 
@@ -93,122 +84,6 @@
         </div>
         <div class="filters" id="filters-upcoming"></div>
         <div id="upcoming-list" class="cards"></div>
-      </section>
-
-      <!-- Watchlist ----------------------------------------------------- -->
-      <section id="panel-watchlist" class="panel" hidden>
-        <div class="panel-head">
-          <p class="muted">Your Plex watchlist. Removing here removes it from Plex too.</p>
-        </div>
-
-        <details class="accordion" id="gaps-card" hidden>
-          <summary class="accordion-head">
-            <span class="accordion-title" id="gaps-title">
-              Shows on your server you are not tracking
-            </span>
-          </summary>
-          <div class="accordion-body">
-            <div class="chart-head">
-              <p class="muted small">
-                Adding one to your watchlist starts episode tracking, so you find out when the next
-                episode is due.
-              </p>
-              <input
-                type="search"
-                id="gaps-filter"
-                class="input search"
-                placeholder="Filter"
-                autocomplete="off"
-              />
-            </div>
-            <div id="gaps-list" class="artists"></div>
-          </div>
-        </details>
-        <div class="filters">
-          <input
-            type="search"
-            id="wl-filter"
-            class="input search"
-            placeholder="Search your watchlist"
-            autocomplete="off"
-          />
-          <div class="chips" id="wl-chips" role="group" aria-label="Type">
-            <button type="button" class="chip is-on" data-wl="movie">Films</button>
-            <button type="button" class="chip is-on" data-wl="show">Shows</button>
-          </div>
-          <select class="input" id="wl-sort" aria-label="Sort watchlist">
-            <option value="title">Title A to Z</option>
-            <option value="added">Recently added</option>
-            <option value="date">Release date</option>
-          </select>
-          <button type="button" class="btn btn-refresh" data-refresh="watchlist">
-            Refresh watchlist
-          </button>
-        </div>
-        <div class="filter-summary">
-          <span id="wl-summary"></span>
-          <button type="button" class="btn btn-tiny" id="wl-undo" hidden>Undo last removal</button>
-        </div>
-        <div id="wl-list" class="artists"></div>
-      </section>
-
-      <!-- Artists ------------------------------------------------------- -->
-      <section id="panel-artists" class="panel" hidden>
-        <div class="filters">
-          <input
-            type="search"
-            id="artist-filter"
-            class="input search"
-            placeholder="Search artists"
-            autocomplete="off"
-          />
-          <select class="input" id="artist-status" aria-label="Filter by status">
-            <option value="all">All artists</option>
-            <option value="attention">Needs attention</option>
-            <option value="matched">Matched</option>
-            <option value="muted">Muted</option>
-          </select>
-          <select class="input" id="artist-sort" aria-label="Sort artists">
-            <option value="name">Name</option>
-            <option value="albums">Most albums in Plex</option>
-            <option value="checked">Least recently checked</option>
-          </select>
-          <button type="button" class="btn btn-refresh" data-refresh="music">
-            Check artists
-          </button>
-        </div>
-        <div class="filter-summary">
-          <span id="artist-summary"></span>
-          <button type="button" class="btn btn-tiny" id="artist-clear" hidden>Clear</button>
-        </div>
-        <div id="artist-list" class="artists"></div>
-      </section>
-
-      <!-- Search -------------------------------------------------------- -->
-      <section id="panel-search" class="panel" hidden>
-        <div class="panel-head">
-          <p class="muted">
-            Search Plex and MusicBrainz, then add a film or show to your Plex watchlist, or start
-            watching an artist you do not own yet.
-          </p>
-        </div>
-        <div class="filters">
-          <input
-            type="search"
-            id="search-box"
-            class="input search"
-            placeholder="Film, show or artist"
-            autocomplete="off"
-          />
-          <div class="chips" id="search-chips" role="group" aria-label="What to search">
-            <button type="button" class="chip is-on" data-sk="movie">Films</button>
-            <button type="button" class="chip is-on" data-sk="show">Shows</button>
-            <button type="button" class="chip is-on" data-sk="artist">Artists</button>
-          </div>
-          <button type="button" class="btn btn-primary" id="search-go">Search</button>
-        </div>
-        <div class="filter-summary"><span id="search-summary"></span></div>
-        <div id="search-results" class="cards"></div>
       </section>
 
       <!-- Dashboard ----------------------------------------------------- -->
@@ -277,8 +152,251 @@
         </section>
       </section>
 
-      <!-- Library ------------------------------------------------------- -->
+      <!-- Following: watchlist, artists, search --------------------------- -->
+      <section id="panel-following" class="panel" hidden>
+        <nav class="subtabs" role="tablist" aria-label="Following">
+          <button class="subtab is-active" data-sub="watchlist" role="tab">
+            Watchlist <span class="pill" id="count-watchlist">0</span>
+          </button>
+          <button class="subtab" data-sub="artists" role="tab">
+            Artists <span class="pill" id="count-artists">0</span>
+          </button>
+          <button class="subtab" data-sub="search" role="tab">Search</button>
+        </nav>
+
+      <!-- Watchlist ----------------------------------------------------- -->
+      <section id="panel-watchlist" class="subpanel">
+        <div class="panel-head">
+          <p class="muted">Your Plex watchlist. Removing here removes it from Plex too.</p>
+        </div>
+
+        <details class="accordion" id="gaps-card" hidden>
+          <summary class="accordion-head">
+            <span class="accordion-title" id="gaps-title">
+              Shows on your server you are not tracking
+            </span>
+          </summary>
+          <div class="accordion-body">
+            <div class="chart-head">
+              <p class="muted small">
+                Adding one to your watchlist starts episode tracking, so you find out when the next
+                episode is due.
+              </p>
+              <input
+                type="search"
+                id="gaps-filter"
+                class="input search"
+                placeholder="Filter"
+                autocomplete="off"
+              />
+            </div>
+            <div id="gaps-list" class="artists"></div>
+          </div>
+        </details>
+        <div class="filters">
+          <input
+            type="search"
+            id="wl-filter"
+            class="input search"
+            placeholder="Search your watchlist"
+            autocomplete="off"
+          />
+          <div class="chips" id="wl-chips" role="group" aria-label="Type">
+            <button type="button" class="chip is-on" data-wl="movie">Films</button>
+            <button type="button" class="chip is-on" data-wl="show">Shows</button>
+          </div>
+          <select class="input" id="wl-sort" aria-label="Sort watchlist">
+            <option value="title">Title A to Z</option>
+            <option value="added">Recently added</option>
+            <option value="date">Release date</option>
+          </select>
+          <button type="button" class="btn btn-refresh" data-refresh="watchlist">
+            Refresh watchlist
+          </button>
+        </div>
+        <div class="filter-summary">
+          <span id="wl-summary"></span>
+          <button type="button" class="btn btn-tiny" id="wl-undo" hidden>Undo last removal</button>
+        </div>
+        <div id="wl-list" class="artists"></div>
+      </section>
+
+      <!-- Artists ------------------------------------------------------- -->
+      <section id="panel-artists" class="subpanel" hidden>
+        <div class="filters">
+          <input
+            type="search"
+            id="artist-filter"
+            class="input search"
+            placeholder="Search artists"
+            autocomplete="off"
+          />
+          <select class="input" id="artist-status" aria-label="Filter by status">
+            <option value="all">All artists</option>
+            <option value="attention">Needs attention</option>
+            <option value="matched">Matched</option>
+            <option value="muted">Muted</option>
+          </select>
+          <select class="input" id="artist-sort" aria-label="Sort artists">
+            <option value="name">Name</option>
+            <option value="albums">Most albums in Plex</option>
+            <option value="checked">Least recently checked</option>
+          </select>
+          <button type="button" class="btn btn-refresh" data-refresh="music">
+            Check artists
+          </button>
+        </div>
+        <div class="filter-summary">
+          <span id="artist-summary"></span>
+          <button type="button" class="btn btn-tiny" id="artist-clear" hidden>Clear</button>
+        </div>
+        <div id="artist-list" class="artists"></div>
+      </section>
+
+      <!-- Search -------------------------------------------------------- -->
+      <section id="panel-search" class="subpanel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            Search Plex and MusicBrainz, then add a film or show to your Plex watchlist, or start
+            watching an artist you do not own yet.
+          </p>
+        </div>
+        <div class="filters">
+          <input
+            type="search"
+            id="search-box"
+            class="input search"
+            placeholder="Film, show or artist"
+            autocomplete="off"
+          />
+          <div class="chips" id="search-chips" role="group" aria-label="What to search">
+            <button type="button" class="chip is-on" data-sk="movie">Films</button>
+            <button type="button" class="chip is-on" data-sk="show">Shows</button>
+            <button type="button" class="chip is-on" data-sk="artist">Artists</button>
+          </div>
+          <button type="button" class="btn btn-primary" id="search-go">Search</button>
+        </div>
+        <div class="filter-summary"><span id="search-summary"></span></div>
+        <div id="search-results" class="cards"></div>
+      </section>
+      </section>
+
+      <!-- Discover: suggestions, trending, friends ------------------------ -->
+      <section id="panel-discover" class="panel" hidden>
+        <nav class="subtabs" role="tablist" aria-label="Discover">
+          <button class="subtab is-active" data-sub="suggestions" role="tab">Suggestions</button>
+          <button class="subtab" data-sub="trending" role="tab">Trending</button>
+          <button class="subtab" data-sub="friends" role="tab">Friends</button>
+        </nav>
+
+      <!-- Suggestions --------------------------------------------------- -->
+      <section id="panel-suggestions" class="subpanel">
+        <div class="panel-head">
+          <p class="muted">
+            Built from what you already have. Artists come from ListenBrainz, films and shows from
+            your own Plex server.
+          </p>
+          <button type="button" class="btn" id="suggest-btn">Build suggestions</button>
+        </div>
+        <div class="filters">
+          <input
+            type="search"
+            id="sg-filter"
+            class="input search"
+            placeholder="Search suggestions"
+            autocomplete="off"
+          />
+          <div class="chips" id="sg-chips" role="group" aria-label="Type">
+            <button type="button" class="chip is-on" data-sg="artist">Artists</button>
+            <button type="button" class="chip is-on" data-sg="movie">Films</button>
+            <button type="button" class="chip is-on" data-sg="show">Shows</button>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="sg-previous" /> Include previous years
+          </label>
+        </div>
+        <div class="filter-summary"><span id="sg-summary"></span></div>
+        <div id="sg-list" class="cards"></div>
+      </section>
+
+      <!-- Trending -------------------------------------------------------- -->
+      <section id="panel-trending" class="subpanel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            What is popular right now. Films and shows from TMDB, country music from the US
+            Apple chart.
+          </p>
+          <button type="button" class="btn" id="trending-btn">Build trending</button>
+        </div>
+        <div class="filters">
+          <input
+            type="search"
+            id="tr-filter"
+            class="input search"
+            placeholder="Search trending"
+            autocomplete="off"
+          />
+          <div class="chips" id="tr-chips" role="group" aria-label="Type">
+            <button type="button" class="chip is-on" data-tr="movie">Films</button>
+            <button type="button" class="chip is-on" data-tr="show">Shows</button>
+            <button type="button" class="chip is-on" data-tr="album">Albums</button>
+            <button type="button" class="chip" data-tr="single">Singles</button>
+          </div>
+          <select class="input" id="tr-held" aria-label="Filter by Plex">
+            <option value="all">In Plex or not</option>
+            <option value="held">Only in Plex</option>
+            <option value="missing">Not in Plex</option>
+          </select>
+          <label class="check">
+            <input type="checkbox" id="tr-catalogue" /> Catalogue
+          </label>
+        </div>
+        <div class="filter-summary"><span id="tr-summary"></span></div>
+        <div id="tr-list" class="cards"></div>
+      </section>
+
+      <!-- Friends ------------------------------------------------------- -->
+      <section id="panel-friends" class="subpanel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            What your Plex friends have on their watchlists. Only friends who share their
+            watchlist appear with anything in it.
+          </p>
+          <button type="button" class="btn" id="fr-refresh">Refresh</button>
+        </div>
+        <div class="filters">
+          <select class="input" id="fr-friend" aria-label="Friend">
+            <option value="all">All friends</option>
+          </select>
+          <input
+            type="search"
+            id="fr-filter"
+            class="input search"
+            placeholder="Search friends' watchlists"
+            autocomplete="off"
+          />
+          <div class="chips" id="fr-chips" role="group" aria-label="Type">
+            <button type="button" class="chip is-on" data-fr="movie">Films</button>
+            <button type="button" class="chip is-on" data-fr="show">Shows</button>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="fr-hide-held" checked /> Hide what I have
+          </label>
+        </div>
+        <div class="filter-summary"><span id="fr-summary"></span></div>
+        <div id="fr-list" class="cards"></div>
+      </section>
+      </section>
+
+      <!-- Library: housekeeping, lyrics ----------------------------------- -->
       <section id="panel-library" class="panel" hidden>
+        <nav class="subtabs" role="tablist" aria-label="Library">
+          <button class="subtab is-active" data-sub="housekeeping" role="tab">Housekeeping</button>
+          <button class="subtab" data-sub="lyrics" role="tab">Lyrics</button>
+        </nav>
+
+      <!-- Housekeeping -------------------------------------------------- -->
+      <section id="panel-housekeeping" class="subpanel">
         <div class="panel-head">
           <p class="muted">
             Housekeeping on what is already on your server. Nothing here is fetched from the
@@ -331,106 +449,8 @@
         </section>
       </section>
 
-      <!-- Suggestions --------------------------------------------------- -->
-      <section id="panel-suggestions" class="panel" hidden>
-        <div class="panel-head">
-          <p class="muted">
-            Built from what you already have. Artists come from ListenBrainz, films and shows from
-            your own Plex server.
-          </p>
-          <button type="button" class="btn" id="suggest-btn">Build suggestions</button>
-        </div>
-        <div class="filters">
-          <input
-            type="search"
-            id="sg-filter"
-            class="input search"
-            placeholder="Search suggestions"
-            autocomplete="off"
-          />
-          <div class="chips" id="sg-chips" role="group" aria-label="Type">
-            <button type="button" class="chip is-on" data-sg="artist">Artists</button>
-            <button type="button" class="chip is-on" data-sg="movie">Films</button>
-            <button type="button" class="chip is-on" data-sg="show">Shows</button>
-          </div>
-          <label class="check">
-            <input type="checkbox" id="sg-previous" /> Include previous years
-          </label>
-        </div>
-        <div class="filter-summary"><span id="sg-summary"></span></div>
-        <div id="sg-list" class="cards"></div>
-      </section>
-
-      <!-- Trending -------------------------------------------------------- -->
-      <section id="panel-trending" class="panel" hidden>
-        <div class="panel-head">
-          <p class="muted">
-            What is popular right now. Films and shows from TMDB, country music from the US
-            Apple chart.
-          </p>
-          <button type="button" class="btn" id="trending-btn">Build trending</button>
-        </div>
-        <div class="filters">
-          <input
-            type="search"
-            id="tr-filter"
-            class="input search"
-            placeholder="Search trending"
-            autocomplete="off"
-          />
-          <div class="chips" id="tr-chips" role="group" aria-label="Type">
-            <button type="button" class="chip is-on" data-tr="movie">Films</button>
-            <button type="button" class="chip is-on" data-tr="show">Shows</button>
-            <button type="button" class="chip is-on" data-tr="album">Albums</button>
-            <button type="button" class="chip" data-tr="single">Singles</button>
-          </div>
-          <select class="input" id="tr-held" aria-label="Filter by Plex">
-            <option value="all">In Plex or not</option>
-            <option value="held">Only in Plex</option>
-            <option value="missing">Not in Plex</option>
-          </select>
-          <label class="check">
-            <input type="checkbox" id="tr-catalogue" /> Catalogue
-          </label>
-        </div>
-        <div class="filter-summary"><span id="tr-summary"></span></div>
-        <div id="tr-list" class="cards"></div>
-      </section>
-
-      <!-- Friends ------------------------------------------------------- -->
-      <section id="panel-friends" class="panel" hidden>
-        <div class="panel-head">
-          <p class="muted">
-            What your Plex friends have on their watchlists. Only friends who share their
-            watchlist appear with anything in it.
-          </p>
-          <button type="button" class="btn" id="fr-refresh">Refresh</button>
-        </div>
-        <div class="filters">
-          <select class="input" id="fr-friend" aria-label="Friend">
-            <option value="all">All friends</option>
-          </select>
-          <input
-            type="search"
-            id="fr-filter"
-            class="input search"
-            placeholder="Search friends' watchlists"
-            autocomplete="off"
-          />
-          <div class="chips" id="fr-chips" role="group" aria-label="Type">
-            <button type="button" class="chip is-on" data-fr="movie">Films</button>
-            <button type="button" class="chip is-on" data-fr="show">Shows</button>
-          </div>
-          <label class="check">
-            <input type="checkbox" id="fr-hide-held" checked /> Hide what I have
-          </label>
-        </div>
-        <div class="filter-summary"><span id="fr-summary"></span></div>
-        <div id="fr-list" class="cards"></div>
-      </section>
-
       <!-- Lyrics -------------------------------------------------------- -->
-      <section id="panel-lyrics" class="panel" hidden>
+      <section id="panel-lyrics" class="subpanel" hidden>
         <div class="panel-head">
           <p class="muted">
             Which tracks in your music library have no lyrics. Found lyrics are kept here, in the
@@ -454,6 +474,7 @@
         </div>
         <div class="filter-summary"><span id="ly-summary"></span></div>
         <div id="ly-list" class="cards"></div>
+      </section>
       </section>
 
       <!-- Settings ------------------------------------------------------ -->

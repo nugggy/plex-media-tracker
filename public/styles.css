@@ -282,6 +282,48 @@ code {
   font-weight: 600;
 }
 
+/* A row of views inside one tab, drawn as a segmented switch so it reads as a
+   choice within the page rather than a second tab bar. */
+.subtabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  max-width: 100%;
+  overflow-x: auto;
+}
+.subtab {
+  font: inherit;
+  font-size: 13.5px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.subtab:hover {
+  color: var(--text);
+}
+.subtab.is-active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.subtab.is-active .pill {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
 main {
   padding: 22px var(--gutter) 60px;
 }

@@ -124,29 +124,64 @@ function banner(message, kind) {
 
 /* ------------------------------------------------------------------ tabs */
 
+/**
+ * Three top tabs hold several views each, chosen by a row of sub-tabs inside
+ * the panel. state.tab is always the view being shown (watchlist, lyrics and
+ * so on), never the group, so the rest of the app can keep asking which view
+ * is open without knowing how the tab bar is arranged. Each group remembers
+ * its last view, so coming back to Following lands on Artists if that is
+ * where you were.
+ */
+const TAB_GROUPS = {
+  following: ['watchlist', 'artists', 'search'],
+  discover: ['suggestions', 'trending', 'friends'],
+  library: ['housekeeping', 'lyrics'],
+};
+const groupOf = {};
+for (const [group, views] of Object.entries(TAB_GROUPS)) {
+  for (const view of views) groupOf[view] = group;
+}
+const lastView = Object.fromEntries(
+  Object.entries(TAB_GROUPS).map(([group, views]) => [group, views[0]]),
+);
+
 function showTab(name) {
-  state.tab = name;
-  $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.tab === name));
+  const view = TAB_GROUPS[name] ? lastView[name] : name;
+  const group = groupOf[view];
+  if (group) lastView[group] = view;
+  const top = group ?? view;
+  state.tab = view;
+  $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.tab === top));
   $$('.panel').forEach((p) => {
-    p.hidden = p.id !== `panel-${name}`;
+    p.hidden = p.id !== `panel-${top}`;
   });
-  if (name === 'search') renderSearch();
-  if (name === 'library') loadLibrary();
-  if (name === 'dash') loadDash();
+  if (group) {
+    const panel = $(`#panel-${group}`);
+    panel.querySelectorAll('.subtab').forEach((t) => {
+      t.classList.toggle('is-active', t.dataset.sub === view);
+    });
+    panel.querySelectorAll('.subpanel').forEach((p) => {
+      p.hidden = p.id !== `panel-${view}`;
+    });
+  }
+  if (view === 'search') renderSearch();
+  if (view === 'housekeeping') loadLibrary();
+  if (view === 'dash') loadDash();
   else stopNowPlaying();
-  if (name === 'out' || name === 'upcoming') loadReleases();
-  if (name === 'watchlist') {
+  if (view === 'out' || view === 'upcoming') loadReleases();
+  if (view === 'watchlist') {
     loadWatchlist();
     loadGaps();
   }
-  if (name === 'artists') loadArtists();
-  if (name === 'suggestions') loadSuggestions();
-  if (name === 'trending') loadTrending();
-  if (name === 'lyrics') loadLyrics();
-  if (name === 'friends') loadFriends();
-  if (name === 'settings') loadSettings();
+  if (view === 'artists') loadArtists();
+  if (view === 'suggestions') loadSuggestions();
+  if (view === 'trending') loadTrending();
+  if (view === 'lyrics') loadLyrics();
+  if (view === 'friends') loadFriends();
+  if (view === 'settings') loadSettings();
 }
 $$('.tab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
+$$('.subtab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.sub)));
 
 /* -------------------------------------------------------- youtube player */
 
@@ -2391,7 +2426,7 @@ async function refreshState() {
       if (state.tab === 'artists') loadArtists();
       if (state.tab === 'watchlist') loadWatchlist();
       if (state.tab === 'suggestions') loadSuggestions();
-      if (state.tab === 'library') loadLibrary();
+      if (state.tab === 'housekeeping') loadLibrary();
     }
     state.wasRunning = running;
 
