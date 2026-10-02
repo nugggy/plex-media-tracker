@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { episodeEvent, type ShowShape } from '../src/episodes.ts';
+import {
+  coveredBySegments,
+  episodeEvent,
+  type SeasonEpisode,
+  type ShowShape,
+} from '../src/episodes.ts';
 
 /** A show holding whole seasons, the shape a finished run has. */
 function shape(seasons: Record<number, number>, ended = false): ShowShape {
@@ -69,4 +74,63 @@ test('an episode with no numbering is left alone', () => {
 test('a show with nothing known about its seasons claims no finale', () => {
   assert.equal(episodeEvent(2, 8, undefined), 'episode');
   assert.equal(episodeEvent(2, 1, undefined), 'season premiere');
+});
+
+/*
+ * Coven Academy as Plex's catalogue listed it: ten doubles, then the same
+ * segments again as singles, one of them a bare placeholder. The server held
+ * the ten doubles, which is the whole season.
+ */
+function ep(episode: number, title: string, held = false): SeasonEpisode {
+  return { key: `e${episode}`, episode, title, localTitle: null, held };
+}
+
+const DOUBLES = [
+  'A Hex Education / Blood, Sweat, and Fears / Mother of All Secrets',
+  'Dead Ends / Power Trip',
+  'Roses Are Red / Pick Your Poison',
+  'The Scrying Game / Trial by Fire',
+  'Time Warp / The Night It Happened',
+  'Between Worlds / What She Saw',
+  'Witchgiving / Cold Turkey',
+  '1998 / Thicker Than Water',
+  'Winter Solstice / The Covening',
+  'Bloodlines / After the Ashes',
+];
+const SINGLES = [
+  'Time Warp', 'Episode 12', 'What She Saw', 'Witchgiving', 'Cold Turkey', '1998',
+  'Thicker Than Water', 'Winter Solstice', 'The Covening', 'Bloodlines', 'After the Ashes',
+];
+
+test('singles that repeat held doubles count as held, placeholder included', () => {
+  const season = [
+    ...DOUBLES.map((t, i) => ep(i + 1, t, true)),
+    ...SINGLES.map((t, i) => ep(i + 11, t)),
+  ];
+  const covered = coveredBySegments(season);
+  assert.equal(covered.size, SINGLES.length);
+  assert.ok(covered.has('e12'));
+});
+
+test('the server title counts when Plex Discover has only a placeholder', () => {
+  const season: SeasonEpisode[] = [
+    { key: 'e1', episode: 1, title: 'Episode 1', localTitle: 'Witchgiving / Cold Turkey', held: true },
+    ep(2, 'Cold Turkey'),
+  ];
+  assert.deepEqual([...coveredBySegments(season)], ['e2']);
+});
+
+test('a single not inside any held double stays missing, and so does a placeholder', () => {
+  const season = [ep(1, 'Witchgiving / Cold Turkey', true), ep(2, 'Cold Turkey'), ep(3, 'Brand New'), ep(4, 'Episode 4')];
+  assert.deepEqual([...coveredBySegments(season)], ['e2']);
+});
+
+test('holding half a season of doubles covers nothing more', () => {
+  const season = DOUBLES.map((t, i) => ep(i + 1, t, i < 5));
+  assert.equal(coveredBySegments(season).size, 0);
+});
+
+test('an ordinary show with single titles is left to its numbers', () => {
+  const season = [ep(1, 'Pilot', true), ep(2, 'Pilot'), ep(3, 'Episode 3')];
+  assert.equal(coveredBySegments(season).size, 0);
 });
