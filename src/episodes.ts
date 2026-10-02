@@ -491,120 +491,6 @@ function showShapes(): Map<string, ShowShape> {
   return shapes;
 }
 
-/** One episode of a season, as far as working out what the server covers. */
-export interface SeasonEpisode {
-  key: string;
-  episode: number | null;
-  /** Plex Discover's title for it. */
-  title: string | null;
-  /** The server's own title for the episode at the same number, when held. */
-  localTitle: string | null;
-  /** True when the server holds this exact season and episode number. */
-  held: boolean;
-}
-
-/** A title's segments, folded for comparison. Placeholders such as "Episode 12" have none. */
-function segments(title: string | null): string[] {
-  if (!title) return [];
-  return title
-    .split(' / ')
-    .map((s) => s.toLowerCase().replace(/[^a-z0-9]+/g, ''))
-    .filter((s) => s && !/^episode\d*$/.test(s));
-}
-
-/**
- * Episodes the server covers without holding their number.
- *
- * Short-segment shows (kids' animation mostly) are often released as single
- * segments but sold and filed as doubles, "Witchgiving / Cold Turkey". Plex's
- * catalogue sometimes lists a season both ways at once, so a server holding
- * every double still looks as if it is missing the singles numbered after
- * them. A single counts as covered when its title is one segment of a held
- * double in the same season.
- *
- * A placeholder such as "Episode 12" has no title to match on. It is covered
- * only when the season is plainly listed twice (at least one single matched a
- * held double), every named segment anywhere in the season is held, and the
- * held doubles add up to at least as many segments as the season's highest
- * episode number. None of this applies unless a held episode really is a
- * double, so an ordinary show is judged on its numbers alone as before.
- */
-export function coveredBySegments(season: SeasonEpisode[]): Set<string> {
-  const covered = new Set<string>();
-  const heldSegments = new Set<string>();
-  let segmentCount = 0;
-  let combined = false;
-
-  for (const ep of season) {
-    if (!ep.held) continue;
-    const a = segments(ep.title);
-    const b = segments(ep.localTitle);
-    if (a.length > 1 || b.length > 1) combined = true;
-    for (const s of [...a, ...b]) heldSegments.add(s);
-    segmentCount += Math.max(a.length, b.length, 1);
-  }
-  if (!combined) return covered;
-
-  const placeholders: string[] = [];
-  let everyNamedHeld = true;
-  for (const ep of season) {
-    if (ep.held) continue;
-    const own = segments(ep.title);
-    if (own.length === 0) placeholders.push(ep.key);
-    else if (own.every((s) => heldSegments.has(s))) covered.add(ep.key);
-    else everyNamedHeld = false;
-  }
-
-  const lastNumber = Math.max(0, ...season.map((ep) => ep.episode ?? 0));
-  if (covered.size > 0 && everyNamedHeld && segmentCount >= lastNumber) {
-    for (const key of placeholders) covered.add(key);
-  }
-  return covered;
-}
-
-/** Every episode the server covers by segment rather than by number. */
-function segmentCoverage(): Set<string> {
-  const rows = db
-    .prepare(
-      `SELECT e.rating_key, e.show_key, e.season, e.episode, e.title,
-              le.title AS local_title, le.show_guid IS NOT NULL AS held
-       FROM episodes e
-       JOIN watchlist_items w ON w.rating_key = e.show_key
-       LEFT JOIN local_episodes le
-         ON le.show_guid = w.guid AND le.season = e.season AND le.episode = e.episode
-       WHERE w.state = 'listed' AND e.season IS NOT NULL`,
-    )
-    .all() as unknown as {
-    rating_key: string;
-    show_key: string;
-    season: number;
-    episode: number | null;
-    title: string | null;
-    local_title: string | null;
-    held: number;
-  }[];
-
-  const bySeason = new Map<string, SeasonEpisode[]>();
-  for (const r of rows) {
-    const id = `${r.show_key}|${r.season}`;
-    let list = bySeason.get(id);
-    if (!list) bySeason.set(id, (list = []));
-    list.push({
-      key: r.rating_key,
-      episode: r.episode,
-      title: r.title,
-      localTitle: r.local_title,
-      held: Boolean(r.held),
-    });
-  }
-
-  const covered = new Set<string>();
-  for (const season of bySeason.values()) {
-    for (const key of coveredBySegments(season)) covered.add(key);
-  }
-  return covered;
-}
-
 export function episodeFeed(
   kind: 'out' | 'upcoming' | 'dismissed',
   recentDays: number,
@@ -640,7 +526,6 @@ export function episodeFeed(
     local_key: string | null;
   })[];
   const shapes = showShapes();
-  const covered = segmentCoverage();
   return rows.map((r) => ({
     kind: 'show' as const,
     id: r.rating_key,
@@ -652,7 +537,7 @@ export function episodeFeed(
     show_key: r.show_key,
     first_seen_at: r.first_seen_at,
     dismissed: r.dismissed,
-    in_library: r.held || covered.has(r.rating_key) ? 1 : 0,
+    in_library: r.held ? 1 : 0,
     plex_rating_key: r.local_key,
   }));
 }

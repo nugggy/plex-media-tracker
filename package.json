@@ -1,6 +1,6 @@
 {
   "name": "plex-media-tracker",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "private": true,
   "type": "module",
   "description": "Tracks new music releases from your Plex library artists, plus films and shows on your Plex watchlist.",
