@@ -573,5 +573,15 @@ export function refreshOwnedFlags(): number {
            WHERE NOT EXISTS (SELECT 1 FROM plex_albums pa
                              WHERE pa.artist_key = releases.plex_key
                                AND pa.norm_title = releases.norm_title)`);
+  return ownedCount();
+}
+
+/** Releases already held, as last read from Plex. */
+export function ownedCount(): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM releases WHERE owned = 1').get() as { n: number }).n;
+}
+
+/** Episodes on the home server, as last read from Plex. */
+export function localEpisodeCount(): number {
+  return (db.prepare('SELECT COUNT(*) AS n FROM local_episodes').get() as { n: number }).n;
 }

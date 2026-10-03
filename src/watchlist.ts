@@ -266,6 +266,8 @@ export async function refreshLibraryState(
     message: '',
   };
   let failures = 0;
+  // Error messages mostly end in a full stop already, and the note adds its own.
+  const reason = (err: unknown): string => (err as Error).message.replace(/\.+$/, '');
   const failed = (note: string): void => {
     failures += 1;
     result.message += `${note} `;
@@ -300,10 +302,10 @@ export async function refreshLibraryState(
               fetchAlbums(url, settings.plex_token, settings.plex_section),
             );
             store.replacePlexAlbums(albums);
-            result.owned = store.refreshOwnedFlags();
+            store.refreshOwnedFlags();
           }
         } catch (err) {
-          failed(`Music library check failed: ${(err as Error).message}.`);
+          failed(`Music library check failed: ${reason(err)}.`);
         }
 
         // The server id is what makes a deep link back into Plex possible.
@@ -324,7 +326,7 @@ export async function refreshLibraryState(
             }
             const showSections = sections.filter((x) => x.type === 'show').map((x) => x.key);
             if (showSections.length > 0) {
-              result.heldEpisodes = await syncLocalEpisodes(
+              await syncLocalEpisodes(
                 url,
                 settings.plex_token,
                 showSections,
@@ -333,7 +335,7 @@ export async function refreshLibraryState(
             }
           });
         } catch (err) {
-          failed(`Film and TV check failed: ${(err as Error).message}.`);
+          failed(`Film and TV check failed: ${reason(err)}.`);
         }
         say(null);
       },
@@ -342,7 +344,7 @@ export async function refreshLibraryState(
         try {
           result.watchlist = await syncWatchlist(say);
         } catch (err) {
-          failed(`Watchlist sync failed: ${(err as Error).message}.`);
+          failed(`Watchlist sync failed: ${reason(err)}.`);
         }
         say(null);
       },
@@ -351,7 +353,7 @@ export async function refreshLibraryState(
         try {
           result.episodes = await syncEpisodes(say, force);
         } catch (err) {
-          failed(`Episode check failed: ${(err as Error).message}.`);
+          failed(`Episode check failed: ${reason(err)}.`);
         }
         say(null);
       },
@@ -361,7 +363,7 @@ export async function refreshLibraryState(
           const films = await syncFilmDates(say);
           if (!films.skipped) result.message += `${films.message} `;
         } catch (err) {
-          failed(`Film date check failed: ${(err as Error).message}.`);
+          failed(`Film date check failed: ${reason(err)}.`);
         }
         say(null);
       },
@@ -371,6 +373,10 @@ export async function refreshLibraryState(
 
   // Flags depend on both the library read and the watchlist, so once, at the end.
   result.inLibrary = wl.refreshInLibraryFlags();
+  // Counted from what is stored, so a server that did not answer this time
+  // reports what the last good read found rather than zero.
+  result.owned = store.ownedCount();
+  result.heldEpisodes = store.localEpisodeCount();
 
   // Only a clean run of everything lets the next start skip its own sync.
   if (failures === 0 && ALL_PARTS.every((p) => want.has(p))) {

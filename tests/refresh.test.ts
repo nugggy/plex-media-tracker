@@ -67,3 +67,29 @@ test('a partial refresh is not remembered as a full one', async () => {
   await refreshLibraryState(undefined, ['watchlist']);
   assert.equal(store.getSetting('last_refresh_at'), '');
 });
+
+test('a refresh that cannot reach the server still reports what it holds', async () => {
+  store.db.exec(`INSERT INTO releases (mb_id, plex_key, title, norm_title, owned, first_seen_at)
+                 VALUES ('held-1', 'a1', 'Held', 'held', 1, '2026-01-01')`);
+  store.db.exec(`INSERT INTO plex_albums (plex_key, artist_key, title, norm_title)
+                 VALUES ('p1', 'a1', 'Held', 'held')`);
+  store.db.exec(`INSERT INTO local_episodes (show_guid, season, episode)
+                 VALUES ('plex://show/x', 1, 1), ('plex://show/x', 1, 2)`);
+  store.setSetting('plex_section', '1');
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.startsWith(SERVER)) throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+    return real(input, init);
+  }) as typeof fetch;
+  try {
+    const result = await refreshLibraryState();
+    assert.match(result.message, /1 releases already held/);
+    assert.match(result.message, /2 episodes on the server/);
+    assert.doesNotMatch(result.message, /\.\./);
+  } finally {
+    globalThis.fetch = real;
+    store.setSetting('plex_section', '');
+    store.db.exec(`DELETE FROM releases; DELETE FROM plex_albums; DELETE FROM local_episodes`);
+  }
+});
