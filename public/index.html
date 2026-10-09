@@ -41,6 +41,7 @@
         <span id="progress-count" class="muted"></span>
       </div>
       <div class="bar"><div id="progress-fill" class="bar-fill"></div></div>
+      <div id="progress-eta" class="small"></div>
       <div id="progress-current" class="muted small"></div>
     </div>
 
@@ -152,7 +153,7 @@
         </section>
       </section>
 
-      <!-- Following: watchlist, artists, search --------------------------- -->
+      <!-- Following: watchlist, artists ------------------------------------ -->
       <section id="panel-following" class="panel" hidden>
         <nav class="subtabs" role="tablist" aria-label="Following">
           <button class="subtab is-active" data-sub="watchlist" role="tab">
@@ -161,7 +162,6 @@
           <button class="subtab" data-sub="artists" role="tab">
             Artists <span class="pill" id="count-artists">0</span>
           </button>
-          <button class="subtab" data-sub="search" role="tab">Search</button>
         </nav>
 
       <!-- Watchlist ----------------------------------------------------- -->
@@ -253,40 +253,15 @@
         <div id="artist-list" class="artists"></div>
       </section>
 
-      <!-- Search -------------------------------------------------------- -->
-      <section id="panel-search" class="subpanel" hidden>
-        <div class="panel-head">
-          <p class="muted">
-            Search Plex and MusicBrainz, then add a film or show to your Plex watchlist, or start
-            watching an artist you do not own yet.
-          </p>
-        </div>
-        <div class="filters">
-          <input
-            type="search"
-            id="search-box"
-            class="input search"
-            placeholder="Film, show or artist"
-            autocomplete="off"
-          />
-          <div class="chips" id="search-chips" role="group" aria-label="What to search">
-            <button type="button" class="chip is-on" data-sk="movie">Films</button>
-            <button type="button" class="chip is-on" data-sk="show">Shows</button>
-            <button type="button" class="chip is-on" data-sk="artist">Artists</button>
-          </div>
-          <button type="button" class="btn btn-primary" id="search-go">Search</button>
-        </div>
-        <div class="filter-summary"><span id="search-summary"></span></div>
-        <div id="search-results" class="cards"></div>
-      </section>
       </section>
 
-      <!-- Discover: suggestions, trending, friends ------------------------ -->
+      <!-- Discover: suggestions, trending, friends, search ---------------- -->
       <section id="panel-discover" class="panel" hidden>
         <nav class="subtabs" role="tablist" aria-label="Discover">
           <button class="subtab is-active" data-sub="suggestions" role="tab">Suggestions</button>
           <button class="subtab" data-sub="trending" role="tab">Trending</button>
           <button class="subtab" data-sub="friends" role="tab">Friends</button>
+          <button class="subtab" data-sub="search" role="tab">Search</button>
         </nav>
 
       <!-- Suggestions --------------------------------------------------- -->
@@ -385,6 +360,33 @@
         </div>
         <div class="filter-summary"><span id="fr-summary"></span></div>
         <div id="fr-list" class="cards"></div>
+      </section>
+
+      <!-- Search -------------------------------------------------------- -->
+      <section id="panel-search" class="subpanel" hidden>
+        <div class="panel-head">
+          <p class="muted">
+            Search Plex and MusicBrainz, then add a film or show to your Plex watchlist, or start
+            watching an artist you do not own yet.
+          </p>
+        </div>
+        <div class="filters">
+          <input
+            type="search"
+            id="search-box"
+            class="input search"
+            placeholder="Film, show or artist"
+            autocomplete="off"
+          />
+          <div class="chips" id="search-chips" role="group" aria-label="What to search">
+            <button type="button" class="chip is-on" data-sk="movie">Films</button>
+            <button type="button" class="chip is-on" data-sk="show">Shows</button>
+            <button type="button" class="chip is-on" data-sk="artist">Artists</button>
+          </div>
+          <button type="button" class="btn btn-primary" id="search-go">Search</button>
+        </div>
+        <div class="filter-summary"><span id="search-summary"></span></div>
+        <div id="search-results" class="cards"></div>
       </section>
       </section>
 

@@ -7,10 +7,10 @@
 :root {
   /* Surfaces, from the page backdrop up to a hovered control. */
   --bg: #000;
-  --surface: #141414;
-  --surface-2: #1f1f1f;
-  --surface-3: #2b2b2b;
-  --header-top: #141414;
+  --surface: #000;
+  --surface-2: #161616;
+  --surface-3: #242424;
+  --header-top: #000;
   --well: rgba(255, 255, 255, 0.08);
 
   /* Borders. The strong tone is for a hovered or armed edge. */
@@ -38,10 +38,10 @@
   --bad-line: #53322e;
 
   /* The two banner tones across the top of the page. */
-  --banner-ok-bg: #33432e;
-  --banner-ok-text: #d5ecc9;
-  --banner-bad-bg: #47332c;
-  --banner-bad-text: #f2d5cd;
+  --banner-ok-bg: #166534;
+  --banner-ok-text: #ecfdf3;
+  --banner-bad-bg: #991b1b;
+  --banner-bad-text: #fef2f2;
 
   /*
    * A badge takes a background, a border and a text tone together, so they are
@@ -216,6 +216,10 @@ code {
   width: 0;
   background: var(--accent);
   transition: width 0.4s ease;
+}
+#progress-eta {
+  margin-top: 6px;
+  color: var(--text);
 }
 #progress-current {
   margin-top: 6px;

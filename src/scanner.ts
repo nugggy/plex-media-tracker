@@ -6,6 +6,7 @@ import { normaliseArtistName, normaliseTitle, titleOverlap } from './matching.ts
 import { daysAgo, nowIso } from './dates.ts';
 import { refreshLibraryState, type RefreshPart } from './watchlist.ts';
 import { ensurePlexUrl, withPlex } from './plexconnect.ts';
+import { plainReason } from './plainerror.ts';
 
 export type Phase =
   | 'idle'
@@ -28,6 +29,10 @@ export interface Progress {
   newReleases: number;
   startedAt: string | null;
   finishedAt: string | null;
+  /** What went wrong, in one plain sentence, when the phase is failed or stopped. */
+  reason: string | null;
+  /** How long the last good run of this kind took, for the time-left estimate. */
+  expectedSeconds: number | null;
 }
 
 const progress: Progress = {
@@ -40,7 +45,29 @@ const progress: Progress = {
   newReleases: 0,
   startedAt: null,
   finishedAt: null,
+  reason: null,
+  expectedSeconds: null,
 };
+
+const NOT_CONFIGURED = 'Plex is not set up yet. Open Settings and add your server.';
+
+/**
+ * Each kind of run (a full check, the Artists check, each refresh button)
+ * remembers how long it last took, so the next one can say roughly how long
+ * is left.
+ */
+function durationKey(kind: string): string {
+  return `last_duration_${kind}`;
+}
+function expectedFor(kind: string): number | null {
+  const seconds = Number(store.getSetting(durationKey(kind)));
+  return seconds > 0 ? seconds : null;
+}
+function rememberDuration(kind: string): void {
+  if (!progress.startedAt) return;
+  const seconds = Math.round((Date.now() - Date.parse(progress.startedAt)) / 1000);
+  if (seconds > 0) store.setSetting(durationKey(kind), String(seconds));
+}
 
 let stopRequested = false;
 
@@ -71,13 +98,18 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     Object.assign(progress, {
       phase: 'failed',
       message: 'Plex is not configured yet. Open Settings and add your server URL and token.',
+      reason: NOT_CONFIGURED,
+      finishedAt: nowIso(),
     });
     return getProgress();
   }
 
   stopRequested = false;
+  const kind = skipQuickRefresh ? 'artists' : 'scan';
   Object.assign(progress, {
     running: true,
+    reason: null,
+    expectedSeconds: expectedFor(kind),
     phase: 'plex',
     done: 0,
     total: 0,
@@ -92,6 +124,7 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
   const scanId = store.startScanRecord();
   let artistsSeen = 0;
   let watchlistNote = '';
+  let quickProblem: string | null = null;
 
   try {
     /* Phase 0: everything quick. Library, watchlist, episodes, film dates.
@@ -108,9 +141,11 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
           true,
         );
         watchlistNote = quick.watchlist?.blocked ?? quick.message;
+        quickProblem = quick.problem;
       } catch (err) {
         // A failure here must not stop the music scan.
         watchlistNote = `Quick refresh failed: ${(err as Error).message}`;
+        quickProblem = plainReason(err);
       }
       progress.current = '';
       checkStop();
@@ -185,9 +220,12 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
       progress.done += 1;
     }
 
+    // The music check finished, but if the quick part went wrong the banner says so.
+    if (!quickProblem) rememberDuration(kind);
     Object.assign(progress, {
       running: false,
-      phase: 'done',
+      phase: quickProblem ? 'failed' : 'done',
+      reason: quickProblem,
       current: '',
       finishedAt: nowIso(),
       message: `Done. ${progress.newReleases} new ${
@@ -205,6 +243,9 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     Object.assign(progress, {
       running: false,
       phase: stopped ? 'stopped' : 'failed',
+      reason: stopped
+        ? 'Sync stopped before it finished. What it found so far has been kept.'
+        : plainReason(err),
       current: '',
       finishedAt: nowIso(),
       message,
@@ -333,12 +374,17 @@ export async function runRefresh(parts?: RefreshPart[], force = false): Promise<
     Object.assign(progress, {
       phase: 'failed',
       message: 'Plex is not configured yet. Open Settings and add your server URL and token.',
+      reason: NOT_CONFIGURED,
+      finishedAt: nowIso(),
     });
     return getProgress();
   }
 
+  const kind = parts ? `refresh-${[...parts].sort().join('-')}` : 'refresh';
   Object.assign(progress, {
     running: true,
+    reason: null,
+    expectedSeconds: expectedFor(kind),
     phase: 'refresh',
     done: 0,
     total: 0,
@@ -358,9 +404,11 @@ export async function runRefresh(parts?: RefreshPart[], force = false): Promise<
       parts,
       force,
     );
+    if (!result.problem) rememberDuration(kind);
     Object.assign(progress, {
       running: false,
-      phase: 'done',
+      phase: result.problem ? 'failed' : 'done',
+      reason: result.problem,
       current: '',
       finishedAt: nowIso(),
       message: result.message,
@@ -369,6 +417,7 @@ export async function runRefresh(parts?: RefreshPart[], force = false): Promise<
     Object.assign(progress, {
       running: false,
       phase: 'failed',
+      reason: plainReason(err),
       current: '',
       finishedAt: nowIso(),
       message: `Refresh failed: ${(err as Error).message}`,

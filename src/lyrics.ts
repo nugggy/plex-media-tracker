@@ -263,7 +263,7 @@ export async function fetchLyrics(tracks: Track[]): Promise<FetchResult> {
       `${result.found} lyrics found, ${result.instrumental} instrumental, ${result.missed} not on LRCLIB` +
       (result.skipped ? `, ${result.skipped} skipped as asked recently` : '') +
       (result.failed ? `, ${result.failed} failed` : '') +
-      '.';
+      '. They are kept in this app only and are not added to Plex.';
     progress.message = result.message;
     return result;
   } finally {

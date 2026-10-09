@@ -21,6 +21,7 @@ import { syncFilmDates } from './tmdb.ts';
 import { fetchMachineId } from './library.ts';
 import { ensurePlexUrl, withPlex } from './plexconnect.ts';
 import { nowIso } from './dates.ts';
+import { plainReason } from './plainerror.ts';
 import { runRefreshPlan, ALL_PARTS, type RefreshPart } from './refreshplan.ts';
 
 export { ALL_PARTS, type RefreshPart };
@@ -227,6 +228,8 @@ export interface RefreshResult {
   watchlist: SyncResult | null;
   episodes: EpisodeSyncResult | null;
   message: string;
+  /** The first thing that went wrong, in plain words, or null for a clean run. */
+  problem: string | null;
 }
 
 /**
@@ -264,13 +267,15 @@ export async function refreshLibraryState(
     watchlist: null,
     episodes: null,
     message: '',
+    problem: null,
   };
   let failures = 0;
   // Error messages mostly end in a full stop already, and the note adds its own.
   const reason = (err: unknown): string => (err as Error).message.replace(/\.+$/, '');
-  const failed = (note: string): void => {
+  const failed = (note: string, err: unknown): void => {
     failures += 1;
     result.message += `${note} `;
+    result.problem ??= plainReason(err);
   };
   const board = progressBoard(onProgress);
 
@@ -292,7 +297,7 @@ export async function refreshLibraryState(
             result.message += `${relayNote} `;
           }
         } catch (err) {
-          failed((err as Error).message);
+          failed((err as Error).message, err);
         }
 
         say('Re-reading your Plex music library');
@@ -305,7 +310,7 @@ export async function refreshLibraryState(
             store.refreshOwnedFlags();
           }
         } catch (err) {
-          failed(`Music library check failed: ${reason(err)}.`);
+          failed(`Music library check failed: ${reason(err)}.`, err);
         }
 
         // The server id is what makes a deep link back into Plex possible.
@@ -335,7 +340,7 @@ export async function refreshLibraryState(
             }
           });
         } catch (err) {
-          failed(`Film and TV check failed: ${reason(err)}.`);
+          failed(`Film and TV check failed: ${reason(err)}.`, err);
         }
         say(null);
       },
@@ -343,8 +348,13 @@ export async function refreshLibraryState(
         const say = board('watchlist');
         try {
           result.watchlist = await syncWatchlist(say);
+          if (result.watchlist.blocked) {
+            result.problem ??=
+              'Stopped because a lot of items were about to be removed from your Plex watchlist at once. ' +
+              'Put back anything you did not mean to remove, then sync again.';
+          }
         } catch (err) {
-          failed(`Watchlist sync failed: ${reason(err)}.`);
+          failed(`Watchlist sync failed: ${reason(err)}.`, err);
         }
         say(null);
       },
@@ -353,7 +363,7 @@ export async function refreshLibraryState(
         try {
           result.episodes = await syncEpisodes(say, force);
         } catch (err) {
-          failed(`Episode check failed: ${reason(err)}.`);
+          failed(`Episode check failed: ${reason(err)}.`, err);
         }
         say(null);
       },
@@ -363,7 +373,7 @@ export async function refreshLibraryState(
           const films = await syncFilmDates(say);
           if (!films.skipped) result.message += `${films.message} `;
         } catch (err) {
-          failed(`Film date check failed: ${reason(err)}.`);
+          failed(`Film date check failed: ${reason(err)}.`, err);
         }
         say(null);
       },

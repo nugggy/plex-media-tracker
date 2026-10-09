@@ -87,6 +87,10 @@ test('a refresh that cannot reach the server still reports what it holds', async
     assert.match(result.message, /1 releases already held/);
     assert.match(result.message, /2 episodes on the server/);
     assert.doesNotMatch(result.message, /\.\./);
+    assert.equal(
+      result.problem,
+      'Your Plex server did not answer. Check that it is switched on and connected.',
+    );
   } finally {
     globalThis.fetch = real;
     store.setSetting('plex_section', '');

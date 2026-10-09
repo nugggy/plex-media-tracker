@@ -38,6 +38,8 @@ const state = {
   expanded: null,
   pollTimer: null,
   wasRunning: false,
+  // The current step's start, for the time-left estimate.
+  step: null,
   cache: { out: [], upcoming: [], dismissed: [] },
   filters: {
     out: {
@@ -133,8 +135,8 @@ function banner(message, kind) {
  * where you were.
  */
 const TAB_GROUPS = {
-  following: ['watchlist', 'artists', 'search'],
-  discover: ['suggestions', 'trending', 'friends'],
+  following: ['watchlist', 'artists'],
+  discover: ['suggestions', 'trending', 'friends', 'search'],
   library: ['housekeeping', 'lyrics'],
 };
 const groupOf = {};
@@ -2411,14 +2413,17 @@ async function refreshState() {
         ? `${Math.round((progress.done / progress.total) * 100)}%`
         : '4%';
       $('#progress-current').textContent = progress.current;
+      $('#progress-eta').textContent = timeLeftText(progress);
+    } else {
+      state.step = null;
     }
 
     if (!configured) {
       banner('Plex is not set up yet. Open Settings and add your server URL and token.');
     } else if (!running && ['failed', 'stopped'].includes(progress.phase)) {
-      banner(progress.message);
+      banner(progress.reason || progress.message);
     } else if (!running && progress.phase === 'done' && progress.finishedAt) {
-      banner(progress.message, 'ok');
+      banner('Sync successful.', 'ok');
     }
 
     if (!running && state.wasRunning) {
@@ -2436,6 +2441,47 @@ async function refreshState() {
     banner(err.message);
     scheduleNextPoll(false);
   }
+}
+
+/**
+ * A rough time left. A step with a count (artists checked so far) is timed
+ * from its own pace; otherwise the last good run of the same kind sets the
+ * expectation. Neither is exact, so it is always worded as "about".
+ */
+function timeLeftText(progress) {
+  const now = Date.now();
+  const elapsed = (now - Date.parse(progress.startedAt)) / 1000;
+
+  // Restart the step clock whenever the phase changes or the count goes back.
+  const step = state.step;
+  if (!step || step.phase !== progress.phase || progress.done < step.done) {
+    state.step = { phase: progress.phase, at: now, done: progress.done };
+  }
+  let stepLeft = null;
+  const counted = progress.done - state.step.done;
+  const stepSeconds = (now - state.step.at) / 1000;
+  if (progress.total > 0 && counted >= 2 && stepSeconds >= 5) {
+    stepLeft = ((progress.total - progress.done) * stepSeconds) / counted;
+  }
+
+  let left = null;
+  if (progress.phase === 'releases' && stepLeft !== null) left = stepLeft;
+  else if (progress.expectedSeconds) left = Math.max(progress.expectedSeconds - elapsed, stepLeft ?? 0);
+  else left = stepLeft;
+
+  const soFar = `${formatDuration(elapsed)} so far`;
+  if (left === null) return `${soFar}. Working out how long is left.`;
+  if (left < 15) return `${soFar}. Nearly done.`;
+  return `${soFar}. About ${formatDuration(left)} to go, roughly ${formatDuration(elapsed + left)} in all.`;
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return 'under a minute';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
 
 function scheduleNextPoll(running) {
