@@ -13,3 +13,7 @@ export const DB_PATH = '';
 export const PORT = 0;
 export const USER_AGENT = `PlexMediaTracker/${APP_VERSION} ( Android personal use )`;
 export function ensureDataDir(): void {}
+/** The phone updates as a whole new app, so it never runs behind its own files. */
+export function restartNeeded(): boolean {
+  return false;
+}

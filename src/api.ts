@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as store from './db.ts';
-import { PLATFORM } from './config.ts';
+import { PLATFORM, restartNeeded } from './config.ts';
 import { APP_VERSION, RELEASES_URL } from './version.ts';
 import * as wl from './watchlist-db.ts';
 import { getProgress, requestStop, runScan, runRefresh } from './scanner.ts';
@@ -242,6 +242,7 @@ export async function handleApi(
         configured: store.isConfigured(),
         watchlist_enabled: watchlistOn,
         machine_id: store.getSetting('plex_machine_id') || null,
+        restart_needed: restartNeeded(),
         counts: {
           out: music.out + watch.out + eps.out,
           upcoming: music.upcoming + watch.upcoming + eps.upcoming,

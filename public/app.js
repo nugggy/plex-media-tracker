@@ -2430,7 +2430,7 @@ const PHASE_TEXT = {
 
 async function refreshState() {
   try {
-    const { configured, counts, progress, scans, machine_id } = await api('/api/state');
+    const { configured, counts, progress, scans, machine_id, restart_needed } = await api('/api/state');
     state.machineId = machine_id ?? null;
 
     $('#count-out').textContent = counts.out;
@@ -2462,7 +2462,9 @@ async function refreshState() {
       state.step = null;
     }
 
-    if (!configured) {
+    if (restart_needed) {
+      banner('The app has been updated. Close its window and open it again to finish, or new buttons will not work.');
+    } else if (!configured) {
       banner('Plex is not set up yet. Open Settings and add your server URL and token.');
     } else if (!running && ['failed', 'stopped'].includes(progress.phase)) {
       banner(progress.reason || progress.message);

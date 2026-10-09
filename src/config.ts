@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { mkdirSync, existsSync, renameSync } from 'node:fs';
+import { mkdirSync, existsSync, renameSync, readFileSync } from 'node:fs';
 
 import { APP_VERSION } from './version.ts';
 
@@ -37,6 +37,22 @@ export const DB_PATH = join(DATA_DIR, 'plex-media-tracker.db');
 export const PORT = Number(process.env.PLEX_TRACKER_PORT ?? process.env.WAX_WRANGLER_PORT ?? 7000);
 
 export const USER_AGENT = `PlexMediaTracker/${APP_VERSION} ( local personal use )`;
+
+/**
+ * True when the files on disk have moved to a newer version than the server
+ * that is running. The page is read fresh from disk but the server is not, so
+ * after an update the new buttons would talk to the old server until the app
+ * is restarted.
+ */
+export function restartNeeded(): boolean {
+  try {
+    const text = readFileSync(join(import.meta.dirname, 'version.ts'), 'utf8');
+    const onDisk = text.match(/APP_VERSION = '([^']+)'/)?.[1];
+    return Boolean(onDisk && onDisk !== APP_VERSION);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Moves data left behind by the old name, so a rename never loses a library
