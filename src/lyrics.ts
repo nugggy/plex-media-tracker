@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS lyrics (
   instrumental INTEGER NOT NULL DEFAULT 0,
   fetched_at   TEXT NOT NULL
 );
--- "We looked and LRCLIB has nothing" kept apart from "nobody has asked", so a
--- dead end is remembered for a fortnight rather than re-asked on every press.
+-- "We looked and LRCLIB has nothing" kept apart from "nobody has asked", with
+-- when it was last asked.
 CREATE TABLE IF NOT EXISTS lyrics_misses (
   rating_key TEXT PRIMARY KEY,
   tried_at   TEXT NOT NULL
@@ -41,7 +41,6 @@ db.exec(SCHEMA);
 const LRCLIB = 'https://lrclib.net/api';
 /** LRCLIB matches on duration; this is how far out a search candidate may be. */
 export const DURATION_TOLERANCE_S = 3;
-export const MISS_RECHECK_DAYS = 14;
 /** Lookups are spaced out to stay a polite client. LRCLIB publishes no hard limit. */
 const GAP_MS = 200;
 
@@ -121,12 +120,6 @@ export function pickCandidate(track: Track, candidates: LrcRecord[]): LrcRecord 
     if (!best || gap < best.gap) best = { c, gap };
   }
   return best?.c ?? null;
-}
-
-export function missStillFresh(triedAt: string | undefined, now: number = Date.now()): boolean {
-  if (!triedAt) return false;
-  const age = now - Date.parse(triedAt);
-  return !Number.isNaN(age) && age >= 0 && age < MISS_RECHECK_DAYS * 86_400_000;
 }
 
 /* -------------------------------------------------------------- storage */
@@ -229,7 +222,6 @@ export interface FetchResult {
   found: number;
   instrumental: number;
   missed: number;
-  skipped: number;
   failed: number;
   message: string;
 }
@@ -258,21 +250,18 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Fetches for every track handed in that is not covered, stored or a fresh
- * miss. One deliberate press does one run; nothing here is automatic.
+ * Fetches for every track handed in that is not covered or stored. A track
+ * that missed before is asked about again, since LRCLIB gains lyrics over
+ * time. One deliberate press does one run; nothing here is automatic.
  */
 export async function fetchLyrics(tracks: Track[]): Promise<FetchResult> {
   beginLyricsJob('Finding lyrics');
-  const result: FetchResult = { found: 0, instrumental: 0, missed: 0, skipped: 0, failed: 0, message: '' };
+  const result: FetchResult = { found: 0, instrumental: 0, missed: 0, failed: 0, message: '' };
   try {
     const todo = trackStates(tracks).filter((t) => t.state === 'missing');
     for (let i = 0; i < todo.length; i += 1) {
       const track = todo[i]!;
       progress.message = `Lyrics, ${i + 1} of ${todo.length}: ${track.title}`;
-      if (missStillFresh(lastMiss(track.rating_key))) {
-        result.skipped += 1;
-        continue;
-      }
       try {
         const lyric = await lookupLyric(track);
         if (lyric) {
@@ -290,7 +279,6 @@ export async function fetchLyrics(tracks: Track[]): Promise<FetchResult> {
     }
     result.message =
       `${result.found} lyrics found, ${result.instrumental} instrumental, ${result.missed} not on LRCLIB` +
-      (result.skipped ? `, ${result.skipped} skipped as asked recently` : '') +
       (result.failed ? `, ${result.failed} failed` : '') +
       '. They are kept in this app only and are not added to Plex.';
     endLyricsJob(result.message, true);

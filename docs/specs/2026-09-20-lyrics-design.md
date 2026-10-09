@@ -72,9 +72,9 @@ candidate is accepted only when its duration is within three seconds of the
 track's. Anything else is reported as not found rather than guessed at, on the
 same reasoning as the YouTube resolver: no lyric is better than the wrong lyric.
 
-A miss is recorded with the time it was attempted, so a second press does not
-re-ask LRCLIB about the same track within a fortnight. A track that genuinely
-has no lyrics anywhere would otherwise be looked up on every single run.
+A miss is recorded with the time it was attempted. A later press of Find lyrics
+asks LRCLIB about it again, because LRCLIB gains lyrics over time and a press is
+always deliberate.
 
 ## Rate and courtesy
 
@@ -108,8 +108,8 @@ lyrics_misses
 
 A miss is its own table rather than a null row in `lyrics`, so "we hold nothing
 for this track" and "we looked and LRCLIB has nothing" stay distinguishable. The
-first is a track nobody has asked about; the second is a dead end worth
-remembering for a fortnight.
+first is a track nobody has asked about; the second was asked about and came
+back empty, and is asked again on the next press.
 
 ## The tab
 

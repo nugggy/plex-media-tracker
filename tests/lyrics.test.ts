@@ -11,8 +11,6 @@ const {
   fromLrclib,
   pickCandidate,
   DURATION_TOLERANCE_S,
-  MISS_RECHECK_DAYS,
-  missStillFresh,
   saveLyric,
   getLyric,
   recordMiss,
@@ -98,12 +96,6 @@ test('a track with no known duration takes the first candidate by the right arti
 
 const NOW = Date.parse('2026-09-29T08:00:00.000Z');
 const daysAgo = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
-
-test('a miss recorded within the fortnight is not asked again', () => {
-  assert.equal(missStillFresh(daysAgo(MISS_RECHECK_DAYS - 1), NOW), true);
-  assert.equal(missStillFresh(daysAgo(MISS_RECHECK_DAYS + 1), NOW), false);
-  assert.equal(missStillFresh(undefined, NOW), false);
-});
 
 /* ------------------------------------------------------------------ storage */
 
