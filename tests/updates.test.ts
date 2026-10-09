@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compareVersions, pickUpdate } from '../mobile/updates.ts';
+import { compareVersions, githubProblem, pickUpdate, updateFromTag } from '../mobile/updates.ts';
 
 test('versions compare by number, not as text', () => {
   assert.ok(compareVersions('1.2.10', '1.2.9') > 0);
@@ -50,4 +50,17 @@ test('an APK hosted anywhere but this repository is never offered', () => {
 test('an unexpected reply from GitHub offers nothing rather than throwing', () => {
   assert.equal(pickUpdate({ message: 'Not Found' }, '1.2.0'), null);
   assert.equal(pickUpdate(null, '1.2.0'), null);
+});
+
+test('an update can be worked out from the newest tag alone', () => {
+  assert.deepEqual(updateFromTag('v1.9.2', '1.9.1'), {
+    version: '1.9.2',
+    url: 'https://github.com/nugggy/plex-media-tracker/releases/download/v1.9.2/plex-media-tracker-1.9.2.apk',
+  });
+  assert.equal(updateFromTag('v1.9.1', '1.9.1'), null);
+  assert.equal(updateFromTag('../evil', '1.0.0'), null);
+});
+
+test('a 403 from GitHub is explained as a temporary limit', () => {
+  assert.match(githubProblem(403), /Try again in an hour/);
 });

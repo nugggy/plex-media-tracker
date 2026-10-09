@@ -8,6 +8,12 @@
 /** Only downloads from this repository's releases are ever offered. */
 const DOWNLOAD_PREFIX = 'https://github.com/nugggy/plex-media-tracker/releases/download/';
 
+/**
+ * The public releases page. It redirects to the newest release's tag, and
+ * unlike the API it is not capped at 60 requests an hour per connection.
+ */
+export const LATEST_RELEASE_PAGE = 'https://github.com/nugggy/plex-media-tracker/releases/latest';
+
 export const LATEST_RELEASE_API =
   'https://api.github.com/repos/nugggy/plex-media-tracker/releases/latest';
 
@@ -31,6 +37,27 @@ interface Asset {
 export interface Update {
   version: string;
   url: string;
+}
+
+/**
+ * An update from the newest tag alone. The release workflow always names the
+ * file plex-media-tracker-<version>.apk, and the native side checks the APK's
+ * signature and version before installing, so a guessed URL cannot do harm.
+ */
+export function updateFromTag(tag: string, installed: string): Update | null {
+  if (!/^v\d+(\.\d+)*$/.test(tag)) return null;
+  const version = tag.slice(1);
+  if (compareVersions(version, installed) <= 0) return null;
+  return { version, url: `${DOWNLOAD_PREFIX}${tag}/plex-media-tracker-${version}.apk` };
+}
+
+/** Plain words for an HTTP status from GitHub. */
+export function githubProblem(status: number): string {
+  if (status === 403 || status === 429) {
+    return 'GitHub is limiting requests from your internet connection for now. Try again in an hour.';
+  }
+  if (status >= 500) return 'GitHub is having trouble right now. Try again shortly.';
+  return `GitHub did not answer as expected (HTTP ${status}). Try again shortly.`;
 }
 
 export function pickUpdate(release: unknown, installed: string): Update | null {

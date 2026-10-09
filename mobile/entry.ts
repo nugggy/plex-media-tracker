@@ -7,7 +7,7 @@
 import { registerPlugin } from '@capacitor/core';
 import { installFetchBridge, thumbLoader } from './bridge.ts';
 import { initMobileDatabase, flushDatabase } from './sqlite-driver.ts';
-import { LATEST_RELEASE_API, pickUpdate, type Update } from './updates.ts';
+import { LATEST_RELEASE_API, githubProblem, pickUpdate, updateFromTag, type Update } from './updates.ts';
 import { APP_VERSION } from '../src/version.ts';
 
 interface ScanKeeperPlugin {
@@ -22,6 +22,7 @@ interface UpdaterPlugin {
   canInstall(): Promise<{ allowed: boolean }>;
   openInstallSettings(): Promise<void>;
   downloadAndInstall(o: { url: string }): Promise<void>;
+  latestTag(): Promise<{ tag: string }>;
 }
 const Updater = registerPlugin<UpdaterPlugin>('Updater');
 
@@ -80,12 +81,24 @@ installFetchBridge(window, async (method, url, body) => (await backend)(method, 
  */
 (window as unknown as { pmtUpdater: unknown }).pmtUpdater = {
   async check(): Promise<{ update: Update | null; installed: string }> {
-    const r = await window.fetch(LATEST_RELEASE_API, {
-      headers: { Accept: 'application/vnd.github+json' },
-      signal: AbortSignal.timeout(20_000),
-    });
+    // The releases page first: it has no hourly cap. The API is the fallback.
+    try {
+      const { tag } = await Updater.latestTag();
+      return { update: updateFromTag(tag, APP_VERSION), installed: APP_VERSION };
+    } catch {
+      // Fall through to the API.
+    }
+    let r: Response;
+    try {
+      r = await window.fetch(LATEST_RELEASE_API, {
+        headers: { Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch {
+      throw new Error('Could not reach GitHub. Check your internet connection.');
+    }
     if (r.status === 404) return { update: null, installed: APP_VERSION };
-    if (!r.ok) throw new Error(`GitHub answered ${r.status}`);
+    if (!r.ok) throw new Error(githubProblem(r.status));
     return { update: pickUpdate(await r.json(), APP_VERSION), installed: APP_VERSION };
   },
   canInstall: () => Updater.canInstall(),

@@ -36,6 +36,40 @@ public class UpdaterPlugin extends Plugin {
     private static final String ALLOWED =
             "https://github.com/nugggy/plex-media-tracker/releases/download/";
 
+    /** Mirrors LATEST_RELEASE_PAGE in mobile/updates.ts. */
+    private static final String LATEST_PAGE =
+            "https://github.com/nugggy/plex-media-tracker/releases/latest";
+
+    /**
+     * The newest release's tag, read from where the public releases page
+     * redirects. Done here rather than in the web view because the page has no
+     * CORS headers, and unlike the API it has no hourly cap.
+     */
+    @PluginMethod
+    public void latestTag(PluginCall call) {
+        new Thread(() -> {
+            try {
+                HttpURLConnection c = (HttpURLConnection) new URL(LATEST_PAGE).openConnection();
+                c.setInstanceFollowRedirects(false);
+                c.setRequestMethod("HEAD");
+                c.setConnectTimeout(20_000);
+                c.setReadTimeout(20_000);
+                int code = c.getResponseCode();
+                String location = c.getHeaderField("Location");
+                c.disconnect();
+                if (code / 100 != 3 || location == null || !location.contains("/releases/tag/")) {
+                    call.reject("GitHub answered " + code, "CHECK_FAILED");
+                    return;
+                }
+                JSObject r = new JSObject();
+                r.put("tag", location.substring(location.lastIndexOf('/') + 1));
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject("Could not reach GitHub.", "CHECK_FAILED");
+            }
+        }).start();
+    }
+
     @PluginMethod
     public void canInstall(PluginCall call) {
         JSObject r = new JSObject();
@@ -80,7 +114,7 @@ public class UpdaterPlugin extends Plugin {
                 getActivity().startActivity(install);
                 call.resolve();
             } catch (Exception e) {
-                call.reject("The download failed: " + e.getMessage(), "DOWNLOAD_FAILED");
+                call.reject("The download did not work. " + e.getMessage(), "DOWNLOAD_FAILED");
             }
         }).start();
     }
@@ -94,7 +128,12 @@ public class UpdaterPlugin extends Plugin {
         c.setInstanceFollowRedirects(true);
         c.setConnectTimeout(20_000);
         c.setReadTimeout(60_000);
-        if (c.getResponseCode() != 200) throw new Exception("HTTP " + c.getResponseCode());
+        int code = c.getResponseCode();
+        if (code == 403 || code == 429) {
+            throw new Exception("GitHub is limiting downloads from your internet connection for now. Try again in an hour.");
+        }
+        if (code == 404) throw new Exception("GitHub does not have that version's file. Check again in a few minutes.");
+        if (code != 200) throw new Exception("GitHub answered HTTP " + code + ". Try again shortly.");
         try (InputStream in = c.getInputStream(); OutputStream os = new FileOutputStream(out)) {
             byte[] buf = new byte[64 * 1024];
             int n;
