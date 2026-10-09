@@ -455,14 +455,15 @@
       <section id="panel-lyrics" class="subpanel" hidden>
         <div class="panel-head">
           <p class="muted">
-            Which tracks in your music library have no lyrics. Found lyrics are kept here, in the
-            app, and nothing is written to the library.
+            Which tracks in your music library have no lyrics. Found lyrics are kept here until you
+            press Save to Plex, which puts a lyric file beside each song so Plexamp shows it.
           </p>
           <div class="panel-tools">
             <label class="check">
               <input type="checkbox" id="ly-missing-only" /> Missing only
             </label>
             <button type="button" class="btn" id="ly-fetch" disabled>Find lyrics</button>
+            <button type="button" class="btn" id="ly-save" disabled>Save to Plex</button>
           </div>
         </div>
         <div class="filters">

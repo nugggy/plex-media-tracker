@@ -241,6 +241,10 @@ code {
   background: var(--banner-ok-bg);
   color: var(--banner-ok-text);
 }
+.banner.info {
+  background: var(--surface-2);
+  color: var(--text);
+}
 
 /* ----------------------------------------------------------------- tabs */
 

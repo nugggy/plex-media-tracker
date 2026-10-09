@@ -1,7 +1,8 @@
 /**
  * Lyrics for tracks in the Plex music library, fetched from LRCLIB and kept
- * in this app's own database. Nothing is written to the music library. The
- * only module that knows the LRCLIB shapes, the matching rules and the tables.
+ * in this app's own database. src/lyricexport.ts can then save them beside the
+ * songs on the NAS. The only module that knows the LRCLIB shapes, the matching
+ * rules and the tables.
  * See docs/specs/2026-09-20-lyrics-design.md.
  */
 import { db } from './db.ts';
@@ -27,6 +28,13 @@ CREATE TABLE IF NOT EXISTS lyrics (
 CREATE TABLE IF NOT EXISTS lyrics_misses (
   rating_key TEXT PRIMARY KEY,
   tried_at   TEXT NOT NULL
+);
+-- Every lyric file this app has written into the music library, so they can
+-- all be found and removed again if ever wanted.
+CREATE TABLE IF NOT EXISTS lyric_files (
+  path       TEXT PRIMARY KEY,
+  rating_key TEXT NOT NULL,
+  written_at TEXT NOT NULL
 );`;
 db.exec(SCHEMA);
 
@@ -147,6 +155,12 @@ export function saveLyric(track: Track, lyric: StoredLyric, source: LyricSource)
   db.prepare('DELETE FROM lyrics_misses WHERE rating_key = ?').run(track.rating_key);
 }
 
+export function recordLyricFile(ratingKey: string, path: string): void {
+  db.prepare(
+    'INSERT OR REPLACE INTO lyric_files (path, rating_key, written_at) VALUES (?, ?, ?)',
+  ).run(path, ratingKey, nowIso());
+}
+
 export function getLyric(ratingKey: string): LyricRow | undefined {
   const row = db.prepare('SELECT * FROM lyrics WHERE rating_key = ?').get(ratingKey) as
     | (Omit<LyricRow, 'instrumental'> & { instrumental: number })
@@ -220,8 +234,24 @@ export interface FetchResult {
   message: string;
 }
 
-const progress = { running: false, message: '' };
-export const lyricsProgress = (): { running: boolean; message: string } => ({ ...progress });
+/**
+ * One lyrics job at a time, finding or saving to Plex, sharing one progress
+ * object so the page polls a single place. `ok` is false when the job ended
+ * badly, so the banner can turn red.
+ */
+const progress = { running: false, message: '', ok: true };
+export const lyricsProgress = (): { running: boolean; message: string; ok: boolean } => ({ ...progress });
+
+export function beginLyricsJob(message: string): void {
+  if (progress.running) throw new Error('A lyrics job is already running.');
+  Object.assign(progress, { running: true, message, ok: true });
+}
+export function lyricsJobMessage(message: string): void {
+  progress.message = message;
+}
+export function endLyricsJob(message: string, ok: boolean): void {
+  Object.assign(progress, { running: false, message, ok });
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -232,8 +262,7 @@ function sleep(ms: number): Promise<void> {
  * miss. One deliberate press does one run; nothing here is automatic.
  */
 export async function fetchLyrics(tracks: Track[]): Promise<FetchResult> {
-  if (progress.running) throw new Error('Lyrics are already being fetched.');
-  progress.running = true;
+  beginLyricsJob('Finding lyrics');
   const result: FetchResult = { found: 0, instrumental: 0, missed: 0, skipped: 0, failed: 0, message: '' };
   try {
     const todo = trackStates(tracks).filter((t) => t.state === 'missing');
@@ -264,9 +293,10 @@ export async function fetchLyrics(tracks: Track[]): Promise<FetchResult> {
       (result.skipped ? `, ${result.skipped} skipped as asked recently` : '') +
       (result.failed ? `, ${result.failed} failed` : '') +
       '. They are kept in this app only and are not added to Plex.';
-    progress.message = result.message;
+    endLyricsJob(result.message, true);
     return result;
-  } finally {
-    progress.running = false;
+  } catch (err) {
+    endLyricsJob(`Finding lyrics failed: ${(err as Error).message}`, false);
+    throw err;
   }
 }

@@ -119,7 +119,8 @@ function banner(message, kind) {
     return;
   }
   node.textContent = message;
-  node.className = kind === 'ok' ? 'banner ok' : 'banner';
+  // ok is green, info is a neutral note for work still going, anything else is red.
+  node.className = kind === 'ok' ? 'banner ok' : kind === 'info' ? 'banner info' : 'banner';
   node.hidden = false;
 }
 
@@ -1187,7 +1188,7 @@ async function pollSuggestions() {
     const { running, message } = await api('/api/suggestions/progress');
     $('#suggest-btn').disabled = running;
     $('#suggest-btn').textContent = running ? 'Building…' : 'Build suggestions';
-    if (message) banner(message, running ? undefined : 'ok');
+    if (message) banner(message, running ? 'info' : 'ok');
     if (running) setTimeout(pollSuggestions, 2000);
     else loadSuggestions();
   } catch {
@@ -1468,7 +1469,7 @@ async function pollTrending() {
     // line straight after this, which would overwrite it in milliseconds and
     // the finished message (in particular which chart failed and is showing
     // stale data) would never actually be read.
-    if (message) banner(message, running ? undefined : 'ok');
+    if (message) banner(message, running ? 'info' : 'ok');
     if (running) setTimeout(pollTrending, 1500);
     else loadTrending();
   } catch {
@@ -1719,6 +1720,9 @@ function renderLyrics() {
   const counts = lyricCounts(ly.tracks);
   const missing = ly.tracks.filter((t) => t.state === 'missing');
   $('#ly-fetch').disabled = missing.length === 0;
+  const saveBtn = $('#ly-save');
+  saveBtn.hidden = ON_PHONE;
+  if (!saveBtn.classList.contains('is-armed')) saveBtn.disabled = storedToSave().length === 0;
   $('#ly-summary').textContent = ly.tracks.length
     ? `${plural(counts.total, 'track')}: ${counts.covered} with lyrics in Plex, ${counts.stored} stored here, ` +
       `${counts.instrumental} instrumental, ${counts.missing} missing`
@@ -1901,11 +1905,51 @@ $('#ly-fetch').addEventListener('click', async (e) => {
   }
 });
 
+/** The phone cannot reach the NAS's folders, so it has no Save to Plex. */
+const ON_PHONE = Boolean(window.Capacitor?.isNativePlatform?.());
+
+function storedToSave() {
+  return state.lyrics.tracks.filter((t) => t.state === 'stored');
+}
+
+// Two presses, as with Dismiss: the first says how many files, the second writes them.
+let lySaveTimer = null;
+$('#ly-save').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const keys = storedToSave().map((t) => t.rating_key);
+  if (keys.length === 0) return;
+  if (lySaveTimer === null) {
+    btn.classList.add('is-armed');
+    btn.textContent = `Save ${plural(keys.length, 'lyric file')} to Plex?`;
+    lySaveTimer = setTimeout(() => {
+      lySaveTimer = null;
+      btn.classList.remove('is-armed');
+      btn.textContent = 'Save to Plex';
+    }, ARM_MS);
+    return;
+  }
+  clearTimeout(lySaveTimer);
+  lySaveTimer = null;
+  btn.classList.remove('is-armed');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  banner('');
+  try {
+    await post('/api/lyrics/export', { keys });
+    pollLyrics();
+  } catch (err) {
+    banner(err.message);
+    btn.textContent = 'Save to Plex';
+    btn.disabled = false;
+  }
+});
+
 async function pollLyrics() {
   try {
-    const { running, message } = await api('/api/lyrics/progress');
-    $('#ly-fetch').textContent = running ? 'Finding…' : 'Find lyrics';
-    if (message) banner(message, running ? undefined : 'ok');
+    const { running, message, ok } = await api('/api/lyrics/progress');
+    $('#ly-fetch').textContent = running ? 'Working…' : 'Find lyrics';
+    if (!running) $('#ly-save').textContent = 'Save to Plex';
+    if (message) banner(message, running ? 'info' : ok ? 'ok' : undefined);
     if (running) setTimeout(pollLyrics, 1000);
     else loadLyricTracks();
   } catch {

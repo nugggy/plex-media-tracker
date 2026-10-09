@@ -11,6 +11,7 @@ cpSync(`${root}/public`, `${root}/www`, { recursive: true });
 const swaps = {
   [resolve(root, 'src/config.ts')]: resolve(root, 'mobile/config.ts'),
   [resolve(root, 'src/sqlite-driver.ts')]: resolve(root, 'mobile/sqlite-driver.ts'),
+  [resolve(root, 'src/lyricfiles.ts')]: resolve(root, 'mobile/lyricfiles.ts'),
 };
 const swapPlugin = {
   name: 'swap',

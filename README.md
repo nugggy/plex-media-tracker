@@ -177,9 +177,12 @@ A track LRCLIB does not carry is not asked about again for a fortnight.
 **Read** opens a stored lyric in the card, and **Paste lyrics** stores one by
 hand, either plain text or a timed LRC file.
 
-Found lyrics live in this app's database only. Nothing is written into the
-music library, because Plex has no way to accept a lyric for a track and the
-files sit on a NAS this PC cannot write to under the path Plex reports.
+Found lyrics are kept in this app until you press **Save to Plex** (desktop
+only). That writes each one beside its song on the NAS, with the same name as
+the song: timed lyrics as `.lrc`, plain ones as `.txt`, which is how Plex and
+Plexamp expect them. It reaches the NAS through its shared folder at the same
+address as the Plex server, never replaces an existing lyric file, skips songs
+Plex already has lyrics for, then asks Plex to re-read the affected albums.
 
 ## Cinema versus digital
 

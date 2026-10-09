@@ -126,8 +126,16 @@ progress strip the rest of the app uses. **Read** opens the stored lyric in the
 card, the way the trailer player opens. **Paste lyrics** takes text by hand for
 one track, stored with source `manual`.
 
-Nothing here offers to write to Plex, because that half does not exist. There is
-no disabled button and no greyed-out promise. The README says why.
+**Save to Plex** (added in 1.9.0, desktop only) writes each stored lyric beside
+its song on the NAS, named like the song: timed lyrics as `.lrc`, plain ones as
+`.txt`. The NAS path Plex reports (`/share/CACHEDEV1_DATA/<folder>/...`) is
+translated to `\\<NAS address>\<folder>\...`, the address taken from the saved
+Plex URL. A song that already has either kind of lyric file, or already has
+lyrics in Plex, is skipped; files are created with the `wx` flag so nothing is
+ever overwritten. Every file written is recorded in `lyric_files`. Afterwards
+each affected album gets a Plex metadata refresh, which is what makes Plex and
+Plexamp pick the file up. The button asks for a second press showing the count,
+in place of a separate dry run. See `src/lyricexport.ts`.
 
 ## Modules
 
@@ -160,11 +168,6 @@ project.
 
 ## Out of scope
 
-- Writing `.lrc` files into the music library. It needs a path translation from
-  the NAS path Plex reports to whatever this PC uses to reach the same folder,
-  and that has to be supplied and verified by hand. When it is built it gets a
-  dry run listing every file it would create, never overwrites an existing
-  lyrics file, and records what it wrote so it can be undone.
 - Embedding lyrics into the audio file's tags. Rewriting the files themselves is
   a much larger risk than a sidecar, for no extra benefit.
 - Translating lyrics, or any other processing of them.

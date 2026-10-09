@@ -61,7 +61,7 @@ interface PlexMetadata {
   Media?: {
     videoResolution?: string;
     videoCodec?: string;
-    Part?: { size?: number; Stream?: { streamType?: number }[] }[];
+    Part?: { size?: number; file?: string; Stream?: { streamType?: number }[] }[];
   }[];
 }
 
@@ -317,6 +317,52 @@ export async function fetchTracks(
     duration_ms: typeof i.duration === 'number' ? i.duration : null,
     covered: covered.has(String(i.ratingKey)),
   }));
+}
+
+export interface TrackFile {
+  /** The audio file's path as the Plex server sees it. */
+  file: string;
+  albumKey: string | null;
+  covered: boolean;
+}
+
+/** Where each track's audio file lives on the server, for writing lyric files beside it. */
+export async function fetchTrackFiles(
+  baseUrl: string,
+  token: string,
+  keys: string[],
+): Promise<Map<string, TrackFile>> {
+  const out = new Map<string, TrackFile>();
+  for (let i = 0; i < keys.length; i += STREAM_BATCH) {
+    const batch = keys.slice(i, i + STREAM_BATCH);
+    const data = await plexGet(baseUrl, token, `/library/metadata/${batch.join(',')}`);
+    for (const item of data.MediaContainer?.Metadata ?? []) {
+      const file = item.Media?.[0]?.Part?.[0]?.file;
+      if (!item.ratingKey || !file) continue;
+      out.set(String(item.ratingKey), {
+        file,
+        albumKey: item.parentRatingKey ? String(item.parentRatingKey) : null,
+        covered: hasLyricsStream(item),
+      });
+    }
+  }
+  return out;
+}
+
+/** Asks Plex to re-read one item from disk, which is how it notices a new lyric file. */
+export async function refreshMetadata(baseUrl: string, token: string, key: string): Promise<void> {
+  const url = new URL(`${cleanBaseUrl(baseUrl)}/library/metadata/${key}/refresh`);
+  url.searchParams.set('X-Plex-Token', token);
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'PUT', signal: AbortSignal.timeout(30_000) });
+  } catch {
+    throw new PlexUnreachable(`Could not reach Plex at ${cleanBaseUrl(baseUrl)}.`);
+  }
+  if (res.status === 401) {
+    throw new PlexError('Plex rejected the token. Check the X-Plex-Token value in Settings.', 401);
+  }
+  if (!res.ok) throw new PlexError(`Plex returned HTTP ${res.status} for a refresh`, res.status);
 }
 
 /** Every track in a music library, paged the way listSectionItems pages. */

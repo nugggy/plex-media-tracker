@@ -23,6 +23,7 @@ import {
   type Track,
 } from './lyrics.ts';
 import { posterUrl, verifyAccount } from './plexdiscover.ts';
+import { exportLyrics } from './lyricexport.ts';
 import { removeItem, restoreItem, type RefreshPart } from './watchlist.ts';
 import { isMbid } from './matching.ts';
 import { resolve as resolveYoutube, clearCache as clearYoutubeCache } from './youtube.ts';
@@ -687,7 +688,7 @@ export async function handleApi(
     }
 
     if (path === '/api/lyrics/fetch' && req.method === 'POST') {
-      if (lyricsProgress().running) return bad(res, 'Lyrics are already being fetched.');
+      if (lyricsProgress().running) return bad(res, 'A lyrics job is already running.');
       const body = await readJson(req);
       const tracks = trackList(body.tracks);
       if (tracks.length === 0) return bad(res, 'No tracks to fetch lyrics for.');
@@ -695,6 +696,17 @@ export async function handleApi(
       // page polls /api/lyrics/progress.
       void fetchLyrics(tracks).catch(() => {});
       send(res, 202, { started: true, count: tracks.length });
+      return true;
+    }
+
+    if (path === '/api/lyrics/export' && req.method === 'POST') {
+      if (lyricsProgress().running) return bad(res, 'A lyrics job is already running.');
+      const body = await readJson(req);
+      const keys = Array.isArray(body.keys) ? body.keys.map(String).filter(Boolean) : [];
+      if (keys.length === 0) return bad(res, 'No stored lyrics to save.');
+      // Not awaited: a whole library is thousands of files; the page polls progress.
+      void exportLyrics(keys);
+      send(res, 202, { started: true, count: keys.length });
       return true;
     }
 
