@@ -63,6 +63,16 @@ export interface MissingRun {
   missing: number[];
   reason: 'gap' | 'aired';
   held: number;
+  /** The show's poster through the app's /thumb proxy, or null with no key. */
+  thumb?: string | null;
+}
+
+/**
+ * Artwork for anything on the home server, in the same form the releases feed
+ * uses. The proxy turns the key into that item's own poster on the server.
+ */
+export function keyThumb(ratingKey: string | null | undefined): string | null {
+  return ratingKey ? `/thumb?key=${encodeURIComponent(ratingKey)}` : null;
 }
 
 /**
@@ -165,9 +175,9 @@ export function missingEpisodes(): MissingRun[] {
   }
 
   out.push(...airedBySeason.values());
-  return out.sort(
-    (a, b) => a.show.localeCompare(b.show) || a.season - b.season,
-  );
+  return out
+    .sort((a, b) => a.show.localeCompare(b.show) || a.season - b.season)
+    .map(withThumb);
 }
 
 /* ------------------------------------------------- duplicates and quality */
@@ -183,7 +193,14 @@ export interface LibraryItem {
   resolution: string | null;
   codec: string | null;
   size: number | null;
+  /** The item's poster through the app's /thumb proxy, or null with no key. */
+  thumb?: string | null;
 }
+
+const withThumb = <T extends { rating_key: string | null }>(row: T): T & { thumb: string | null } => ({
+  ...row,
+  thumb: keyThumb(row.rating_key),
+});
 
 /** More than one file for the same thing, which is usually an accident. */
 export function duplicates(): LibraryItem[] {
@@ -207,7 +224,7 @@ export function duplicates(): LibraryItem[] {
     )
     .all() as unknown as LibraryItem[];
 
-  return [...films, ...eps];
+  return [...films, ...eps].map(withThumb);
 }
 
 /** Anything below 1080p, worth replacing if a better copy exists. */
@@ -223,7 +240,7 @@ export function upgradeCandidates(): LibraryItem[] {
        ORDER BY title COLLATE NOCASE`,
     )
     .all() as unknown as LibraryItem[];
-  return films;
+  return films.map(withThumb);
 }
 
 export interface LibraryReport {

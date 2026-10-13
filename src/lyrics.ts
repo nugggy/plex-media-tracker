@@ -160,6 +160,21 @@ export function getLyric(ratingKey: string): LyricRow | undefined {
   return row ? { ...row, instrumental: row.instrumental === 1 } : undefined;
 }
 
+/**
+ * Counts for the Lyrics tab's summary line, from this app's own tables only,
+ * so it answers at once. An instrumental is a found answer but not a lyric,
+ * so it is not counted as having one. Tracks Plex already carries lyrics for
+ * are not in either table: the app only learns that while listing tracks,
+ * and never stores it.
+ */
+export function lyricCounts(): { with_lyrics: number; saved_to_plex: number } {
+  const n = (sql: string): number => (db.prepare(sql).get() as { n: number }).n;
+  return {
+    with_lyrics: n('SELECT COUNT(*) AS n FROM lyrics WHERE instrumental = 0'),
+    saved_to_plex: n('SELECT COUNT(*) AS n FROM lyric_files'),
+  };
+}
+
 /** Each track with what this app knows about it. Covered wins: Plex already has it. */
 export function trackStates(
   tracks: Track[],

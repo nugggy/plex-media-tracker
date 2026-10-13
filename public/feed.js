@@ -437,3 +437,162 @@ export function lyricCounts(tracks) {
   }
   return counts;
 }
+
+/**
+ * Why a feed that has rows came out empty, and the one change that would bring
+ * some back. "Nothing matches those filters" was shown even when the only thing
+ * hiding the rows was Hide what I have, which on a quiet week is every row, so
+ * the honest message there is that you are caught up.
+ *
+ * Each filter is relaxed on its own, in the order a person is most likely to
+ * have meant: what you already have, cinema-only films, the time window, the
+ * type chips, then the search text. The first relaxation that brings rows back
+ * names the cause. Returns { reason, title, hint, action }, where action is null
+ * or { kind, label } and, for a wider window, the horizon to switch to.
+ */
+export function emptyReason(rows, f, direction, now = new Date()) {
+  const count = (over) => applyFilters(rows, { ...f, ...over }, direction, now).length;
+  const ahead = direction === 'upcoming';
+  const q = f.q.trim();
+
+  if (f.types.size === 0) {
+    return {
+      reason: 'no-types',
+      title: 'Every type is switched off',
+      hint: 'Turn at least one of Albums, EPs, Films or Shows back on.',
+      action: { kind: 'types-on', label: 'Show every type' },
+    };
+  }
+
+  if (f.held === false) {
+    const n = count({ held: true });
+    if (n > 0) {
+      const [one, many] = q
+        ? [`match for "${q}"`, `matches for "${q}"`]
+        : ahead
+          ? ['upcoming item', 'upcoming items']
+          : ['recent release', 'recent releases'];
+      return {
+        reason: 'held',
+        title: q ? 'Already on your server' : "You're all caught up",
+        hint:
+          n === 1
+            ? `The only ${one} is already on your server.`
+            : `All ${n} ${many} are already on your server.`,
+        action: { kind: 'show-held', label: 'Show them' },
+      };
+    }
+  }
+
+  if (!f.cinema) {
+    const n = count({ cinema: true });
+    if (n > 0) {
+      return {
+        reason: 'cinema',
+        title: 'Only in cinemas so far',
+        hint: `${plural(n, 'film')} ${n === 1 ? 'is' : 'are'} showing in cinemas but not out at home yet.`,
+        action: { kind: 'show-cinema', label: 'Show cinema releases' },
+      };
+    }
+  }
+
+  if (f.horizon) {
+    const window = (HORIZONS[direction] ?? []).find((h) => h.days === f.horizon);
+    const named = window ? window.label.toLowerCase() : `${f.horizon} days`;
+    const wider = (HORIZONS[direction] ?? [])
+      .filter((h) => h.days === 0 || h.days > f.horizon)
+      .sort((a, b) => (a.days || Infinity) - (b.days || Infinity))
+      .find((h) => count({ horizon: h.days }) > 0);
+    if (wider) {
+      const n = count({ horizon: 0 });
+      return {
+        reason: 'window',
+        title: `Nothing in the ${named}`,
+        hint: `${plural(n, 'item')} ${n === 1 ? 'is' : 'are'} ${ahead ? 'further ahead' : 'further back'}.`,
+        action: { kind: 'widen', label: `Show the ${wider.label.toLowerCase()}`, horizon: wider.days },
+      };
+    }
+  }
+
+  if (f.types.size < ALL_TYPES.length && count({ types: new Set(ALL_TYPES) }) > 0) {
+    const off = ALL_TYPES.filter((t) => !f.types.has(t)).map((t) => TYPE_LABELS[t]);
+    return {
+      reason: 'types',
+      title: 'Nothing of the types switched on',
+      hint: `There is more under ${off.join(' and ')}.`,
+      action: { kind: 'types-on', label: 'Show every type' },
+    };
+  }
+
+  if (q) {
+    return {
+      reason: 'search',
+      title: `Nothing matches "${q}"`,
+      hint: 'Check the spelling, or search for part of the title or artist.',
+      action: { kind: 'clear-search', label: 'Clear the search' },
+    };
+  }
+
+  return {
+    reason: 'filters',
+    title: 'Nothing matches those filters',
+    hint: 'Clear the filters to see everything.',
+    action: { kind: 'clear', label: 'Clear filters' },
+  };
+}
+
+/**
+ * The letter a name files under in an A to Z jump bar: its first letter with
+ * accents folded away, or # for anything starting with a digit or a symbol.
+ * Takes the same key the list is sorted by, so the bar and the order agree.
+ */
+export function jumpLetter(key) {
+  const first = fold(String(key ?? '').trim()).charAt(0).toUpperCase();
+  return first >= 'A' && first <= 'Z' ? first : '#';
+}
+
+/**
+ * The letters a sorted list actually contains, in list order, each with the
+ * index of its first row, so the bar only offers letters that lead somewhere.
+ */
+export function jumpLetters(keys) {
+  const seen = new Map();
+  keys.forEach((key, i) => {
+    const letter = jumpLetter(key);
+    if (!seen.has(letter)) seen.set(letter, i);
+  });
+  return [...seen].map(([letter, index]) => ({ letter, index }));
+}
+
+/** Whole days from a YYYY-MM-DD date to today in Sydney, never negative. */
+export function daysSince(iso, now = new Date()) {
+  if (!iso) return null;
+  const day = String(iso).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  return Math.max(0, dayNumber(sydneyDate(now)) - dayNumber(day));
+}
+
+/**
+ * The words a feed's tab badge stands for, for its tooltip and screen readers.
+ * The badge counts exactly what the tab shows, so the words name the window
+ * and say when filters are narrowing it.
+ */
+export function badgeLabel(n, direction, f, defaults) {
+  const window = (HORIZONS[direction] ?? []).find((h) => h.days === f.horizon);
+  const filtered =
+    f.q !== '' ||
+    f.types.size !== ALL_TYPES.length ||
+    f.cinema === true ||
+    f.held !== defaults.held;
+  let base;
+  if (direction === 'upcoming') {
+    base = f.horizon && window ? `${n} in the ${window.label.toLowerCase()}` : `${n} dated ahead`;
+  } else {
+    base =
+      f.held === false
+        ? `${n} out recently and not on your server`
+        : `${n} out recently`;
+    if (f.horizon && window) base += `, ${window.label.toLowerCase()}`;
+  }
+  return filtered ? `${base}, with your filters` : base;
+}

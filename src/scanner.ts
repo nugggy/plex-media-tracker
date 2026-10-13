@@ -72,6 +72,16 @@ function rememberDuration(kind: string): void {
 
 let stopRequested = false;
 
+/**
+ * True while a full scan or an Artists check runs. Unlike a quick refresh,
+ * these lean on MusicBrainz for minutes, which is what the automatic trending
+ * rebuild waits for rather than sharing the one-a-second allowance with it.
+ */
+let musicScan = false;
+export function musicScanRunning(): boolean {
+  return musicScan;
+}
+
 /** The phone uses these to keep a foreground service running during a check. */
 export const scanHooks = { onStart: (): void => {}, onEnd: (): void => {} };
 
@@ -106,6 +116,7 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
   }
 
   stopRequested = false;
+  musicScan = true;
   const kind = skipQuickRefresh ? 'artists' : 'scan';
   Object.assign(progress, {
     running: true,
@@ -177,6 +188,9 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     }
     store.markAbsentArtists(artists.map((a) => a.plex_key));
     store.replacePlexAlbums(albums);
+    // A hand-followed artist who is now in Plex becomes one row, before the
+    // release check below would otherwise look them up twice.
+    store.mergeManualArtists();
     artistsSeen = artists.length;
     progress.message = `${artists.length} artists and ${albums.length} albums in Plex`;
     checkStop();
@@ -196,6 +210,8 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
       await identifyArtist(artist);
       progress.done += 1;
     }
+    // Identifying can give a Plex artist the ID a hand-followed one already has.
+    store.mergeManualArtists();
 
     /* Phase 3: what have they released ---------------------------------- */
     const staleDays = Number(settings.stale_days) || 7;
@@ -259,6 +275,7 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     );
   } finally {
     stopRequested = false;
+    musicScan = false;
     scanHooks.onEnd();
   }
 

@@ -2,7 +2,7 @@
 <html lang="en-AU">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Plex Media Tracker</title>
     <link rel="stylesheet" href="/styles.css" />
     <link
@@ -26,10 +26,11 @@
       <div class="topbar-actions">
         <button
           id="scan-btn"
-          class="btn btn-primary"
+          class="btn btn-primary btn-scan"
           title="Reads your Plex library and watchlist, checks episode schedules and film dates, then asks MusicBrainz about any artist not checked recently."
         >
-          Check for updates
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="btn-label" id="scan-label">Check for updates</span>
         </button>
         <button id="stop-btn" class="btn btn-quiet" hidden>Stop</button>
       </div>
@@ -48,14 +49,14 @@
     <div id="banner" class="banner" role="status" aria-live="polite" hidden></div>
 
     <nav class="tabs" role="tablist" aria-label="Sections">
-      <button class="tab is-active" data-tab="out" role="tab" id="tab-out" aria-controls="panel-out" aria-selected="true" tabindex="0">
-        Out now <span class="pill" id="count-out">0</span>
+      <button class="tab is-active" data-tab="out" data-label="Out now" role="tab" id="tab-out" aria-controls="panel-out" aria-selected="true" tabindex="0">
+        Out now <span class="pill" id="count-out" data-count="out">0</span>
       </button>
-      <button class="tab" data-tab="upcoming" role="tab" id="tab-upcoming" aria-controls="panel-upcoming" aria-selected="false" tabindex="-1">
-        Coming soon <span class="pill" id="count-upcoming">0</span>
+      <button class="tab" data-tab="upcoming" data-label="Coming soon" role="tab" id="tab-upcoming" aria-controls="panel-upcoming" aria-selected="false" tabindex="-1">
+        Coming soon <span class="pill" id="count-upcoming" data-count="upcoming">0</span>
       </button>
-      <button class="tab" data-tab="dash" role="tab" id="tab-dash" aria-controls="panel-dash" aria-selected="false" tabindex="-1">
-        Dashboard <span class="pill" id="count-streams" hidden>0</span>
+      <button class="tab" data-tab="dash" data-label="Dashboard" role="tab" id="tab-dash" aria-controls="panel-dash" aria-selected="false" tabindex="-1">
+        Dashboard <span class="pill" id="count-streams" data-count="streams" hidden>0</span>
       </button>
       <button class="tab" data-tab="following" role="tab" id="tab-following" aria-controls="panel-following" aria-selected="false" tabindex="-1">Following</button>
       <button class="tab" data-tab="discover" role="tab" id="tab-discover" aria-controls="panel-discover" aria-selected="false" tabindex="-1">Discover</button>
@@ -63,7 +64,50 @@
       <button class="tab" data-tab="settings" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Settings</button>
     </nav>
 
+    <!-- On a phone the seven tabs do not fit across the top, so five sit along
+         the bottom instead and More leads to the other three. -->
+    <nav class="bottomnav" role="tablist" aria-label="Sections">
+      <button class="bnav-tab is-active" data-tab="out" data-label="Out now" role="tab" id="bnav-out" aria-controls="panel-out" aria-selected="true" tabindex="0">
+        <span class="bnav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="pill" data-count="out">0</span></span>
+        <span class="bnav-label">Out now</span>
+      </button>
+      <button class="bnav-tab" data-tab="upcoming" data-label="Coming soon" role="tab" id="bnav-upcoming" aria-controls="panel-upcoming" aria-selected="false" tabindex="-1">
+        <span class="bnav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span class="pill" data-count="upcoming">0</span></span>
+        <span class="bnav-label">Coming soon</span>
+      </button>
+      <button class="bnav-tab" data-tab="dash" data-label="Dashboard" role="tab" id="bnav-dash" aria-controls="panel-dash" aria-selected="false" tabindex="-1">
+        <span class="bnav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><span class="pill" data-count="streams" hidden>0</span></span>
+        <span class="bnav-label">Dashboard</span>
+      </button>
+      <button class="bnav-tab" data-tab="following" data-label="Following" role="tab" id="bnav-following" aria-controls="panel-following" aria-selected="false" tabindex="-1">
+        <span class="bnav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></span>
+        <span class="bnav-label">Following</span>
+      </button>
+      <button class="bnav-tab" data-tab="more" data-label="More" role="tab" id="bnav-more" aria-controls="panel-more" aria-selected="false" tabindex="-1">
+        <span class="bnav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg></span>
+        <span class="bnav-label">More</span>
+      </button>
+    </nav>
+
     <main>
+      <!-- More, on phones only ----------------------------------------- -->
+      <section id="panel-more" class="panel" role="tabpanel" aria-labelledby="bnav-more" hidden>
+        <div class="more-list">
+          <button type="button" class="more-item" data-go="discover">
+            <span class="more-title">Discover</span>
+            <span class="muted small">Suggestions, trending, friends and search</span>
+          </button>
+          <button type="button" class="more-item" data-go="library">
+            <span class="more-title">Library</span>
+            <span class="muted small">Missing episodes, duplicates, upgrades and lyrics</span>
+          </button>
+          <button type="button" class="more-item" data-go="settings">
+            <span class="more-title">Settings</span>
+            <span class="muted small">Plex server, watchlist, film dates and what to watch</span>
+          </button>
+        </div>
+      </section>
+
       <!-- Out now ------------------------------------------------------- -->
       <section id="panel-out" class="panel" role="tabpanel" aria-labelledby="tab-out">
         <div class="panel-head">
@@ -149,18 +193,18 @@
         </div>
         <section class="chart-card">
           <div class="chart-head"><h2>Recent plays</h2></div>
-          <div id="hist-recent" class="artists"></div>
+          <div id="hist-recent" class="play-list"></div>
         </section>
       </section>
 
       <!-- Following: watchlist, artists ------------------------------------ -->
       <section id="panel-following" class="panel" role="tabpanel" aria-labelledby="tab-following" hidden>
         <nav class="subtabs" role="tablist" aria-label="Following">
-          <button class="subtab is-active" data-sub="watchlist" role="tab" id="subtab-watchlist" aria-controls="panel-watchlist" aria-selected="true" tabindex="0">
-            Watchlist <span class="pill" id="count-watchlist">0</span>
+          <button class="subtab is-active" data-sub="watchlist" data-label="Watchlist" role="tab" id="subtab-watchlist" aria-controls="panel-watchlist" aria-selected="true" tabindex="0">
+            Watchlist <span class="pill" id="count-watchlist" data-count="watchlist">0</span>
           </button>
-          <button class="subtab" data-sub="artists" role="tab" id="subtab-artists" aria-controls="panel-artists" aria-selected="false" tabindex="-1">
-            Artists <span class="pill" id="count-artists">0</span>
+          <button class="subtab" data-sub="artists" data-label="Artists" role="tab" id="subtab-artists" aria-controls="panel-artists" aria-selected="false" tabindex="-1">
+            Artists <span class="pill" id="count-artists" data-count="artists">0</span>
           </button>
         </nav>
 
@@ -232,6 +276,7 @@
             autocomplete="off"
           />
           <select class="input" id="artist-status" aria-label="Filter by status">
+            <option value="active">Active</option>
             <option value="all">All artists</option>
             <option value="attention">Needs attention</option>
             <option value="matched">Matched</option>
@@ -291,7 +336,7 @@
           </label>
         </div>
         <div class="filter-summary"><span id="sg-summary"></span></div>
-        <div id="sg-list" class="cards"></div>
+        <div id="sg-list" class="poster-grid"></div>
       </section>
 
       <!-- Trending -------------------------------------------------------- -->
@@ -303,6 +348,7 @@
           </p>
           <button type="button" class="btn" id="trending-btn">Build trending</button>
         </div>
+        <div id="tr-notice" class="notice" role="status" hidden></div>
         <div class="filters">
           <input
             type="search"
@@ -326,7 +372,7 @@
           </label>
         </div>
         <div class="filter-summary"><span id="tr-summary"></span></div>
-        <div id="tr-list" class="cards"></div>
+        <div id="tr-list" class="poster-grid"></div>
       </section>
 
       <!-- Friends ------------------------------------------------------- -->
@@ -465,6 +511,7 @@
             <button type="button" class="btn" id="ly-save" disabled>Save to Plex</button>
           </div>
         </div>
+        <p class="ly-overview muted" id="ly-overview" hidden></p>
         <div class="filters">
           <select class="input" id="ly-artist" aria-label="Artist">
             <option value="">Choose an artist</option>
@@ -473,6 +520,7 @@
           <select class="input" id="ly-album" aria-label="Album" disabled>
             <option value="">All albums</option>
           </select>
+          <button type="button" class="btn btn-tiny" id="ly-whole">Whole library</button>
         </div>
         <div class="filter-summary"><span id="ly-summary"></span></div>
         <div id="ly-list" class="cards"></div>
@@ -481,8 +529,9 @@
 
       <!-- Settings ------------------------------------------------------ -->
       <section id="panel-settings" class="panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
-        <form id="settings-form" class="form">
-          <fieldset>
+        <p id="settings-unsaved" class="notice" role="status" hidden></p>
+        <form id="settings-form" class="form" novalidate>
+          <fieldset data-section="plex">
             <legend>Plex server</legend>
 
             <label class="field">
@@ -560,6 +609,10 @@
                 <option value="">Test the connection to load libraries</option>
               </select>
             </label>
+            <div class="row save-row">
+              <button type="button" class="btn btn-primary btn-tiny" data-save="plex" disabled>Save</button>
+              <span class="muted small save-result" data-result="plex" role="status"></span>
+            </div>
           </fieldset>
 
           <fieldset>
@@ -581,7 +634,7 @@
             </p>
           </fieldset>
 
-          <fieldset>
+          <fieldset data-section="watchlist">
             <legend>Watchlist</legend>
             <label class="check">
               <input type="checkbox" id="watchlist_enabled" /> Track films and shows from my Plex
@@ -603,9 +656,13 @@
               <button type="button" id="wl-test-btn" class="btn">Check watchlist access</button>
               <span id="wl-test-result" class="muted small"></span>
             </div>
+            <div class="row save-row">
+              <button type="button" class="btn btn-primary btn-tiny" data-save="watchlist" disabled>Save</button>
+              <span class="muted small save-result" data-result="watchlist" role="status"></span>
+            </div>
           </fieldset>
 
-          <fieldset>
+          <fieldset data-section="films">
             <legend>Film release dates</legend>
             <label class="field">
               <span>TMDB API key (optional)</span>
@@ -623,9 +680,13 @@
                 treated as cinema releases and hidden unless you tick Cinema.
               </small>
             </label>
+            <div class="row save-row">
+              <button type="button" class="btn btn-primary btn-tiny" data-save="films" disabled>Save</button>
+              <span class="muted small save-result" data-result="films" role="status"></span>
+            </div>
           </fieldset>
 
-          <fieldset>
+          <fieldset data-section="music">
             <legend>What to watch</legend>
             <div class="row wrap">
               <label class="check"><input type="checkbox" id="include_album" /> Albums</label>
@@ -640,7 +701,7 @@
               <span>Treat a release as recent for</span>
               <span class="suffix">
                 <input class="input" type="number" min="7" max="1095" id="recent_days" />
-                <em>days</em>
+                <em data-unit="recent_days">days</em>
               </span>
             </label>
 
@@ -648,15 +709,14 @@
               <span>Re-check each artist every</span>
               <span class="suffix">
                 <input class="input" type="number" min="1" max="90" id="stale_days" />
-                <em>days</em>
+                <em data-unit="stale_days">days</em>
               </span>
             </label>
+            <div class="row save-row">
+              <button type="button" class="btn btn-primary btn-tiny" data-save="music" disabled>Save</button>
+              <span class="muted small save-result" data-result="music" role="status"></span>
+            </div>
           </fieldset>
-
-          <div class="row">
-            <button type="submit" class="btn btn-primary">Save settings</button>
-            <span id="save-result" class="muted small"></span>
-          </div>
         </form>
 
         <section class="history">

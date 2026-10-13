@@ -21,6 +21,8 @@ import {
   groupByDay,
   dayHeading,
   formatPartialDate,
+  emptyReason,
+  badgeLabel,
 } from '../feed.js';
 import { $, banner, debounce, el, safeHref } from '../lib/dom.js';
 import { api, post } from '../lib/api.js';
@@ -29,7 +31,9 @@ import {
   artwork,
   confirmingButton,
   eventTag,
+  linkButton,
   releaseArtwork,
+  setBadge,
   setChip,
   togglePlayer,
 } from '../components.js';
@@ -176,9 +180,63 @@ export async function loadReleases() {
   try {
     const { releases } = await api(`/api/releases?view=${view}`);
     state.cache[view] = releases;
+    state.cacheLoaded[view] = true;
     renderReleases();
   } catch (err) {
     banner(err.message);
+  }
+}
+
+/**
+ * Reads a feed without drawing it, so the badge on a tab not yet opened can
+ * count exactly what that tab will show. Failing is quiet: the badge keeps the
+ * server's own count until the tab is opened.
+ */
+export async function prefetchFeed(view) {
+  try {
+    const { releases } = await api(`/api/releases?view=${view}`);
+    state.cache[view] = releases;
+    state.cacheLoaded[view] = true;
+    if (state.tab === view && currentView() === view) renderReleases();
+    else updateFeedBadges();
+  } catch {
+    // The server's count stands in.
+  }
+}
+
+/** How many rows a feed shows with its filters as they are now, or null if it is not loaded. */
+function feedCount(key) {
+  if (!state.cacheLoaded[key]) return null;
+  return groupEpisodes(applyFilters(state.cache[key], state.filters[key], key), key).length;
+}
+
+/**
+ * The badges on Out now and Coming soon count what each tab shows, with its
+ * window and filters as they stand, so the number matches the Showing line.
+ * Until a feed has been read, the server's count stands in: for Coming soon
+ * that is its week ahead when the server sends one.
+ */
+export function updateFeedBadges(counts = state.serverCounts) {
+  if (counts) state.serverCounts = counts;
+  const c = state.serverCounts ?? {};
+  for (const key of ['out', 'upcoming']) {
+    const f = state.filters[key];
+    const shown = feedCount(key);
+    if (shown !== null) {
+      setBadge(key, shown, badgeLabel(shown, key, f, { held: DEFAULT_HELD[key] }));
+      continue;
+    }
+    const week = key === 'upcoming' ? c.upcoming_week : null;
+    const fallback = key === 'upcoming' ? (week ?? c.upcoming) : c.out;
+    if (fallback === undefined || fallback === null) continue;
+    // The server's week ahead matches the tab's opening window; its plain
+    // upcoming count covers everything dated ahead, so it is labelled as that.
+    const defaults = { ...f, q: '', types: new Set(ALL_TYPES), cinema: false, held: DEFAULT_HELD[key] };
+    const label =
+      key === 'upcoming' && week == null
+        ? `${fallback} dated ahead`
+        : badgeLabel(fallback, key, { ...defaults, horizon: DEFAULT_HORIZONS[key] }, { held: DEFAULT_HELD[key] });
+    setBadge(key, fallback, label);
   }
 }
 
@@ -195,20 +253,14 @@ function renderReleases() {
   releaseArtwork(target);
   target.replaceChildren();
   target.before(summaryFor(key, rows.length, all.length, f, view));
+  updateFeedBadges();
 
   if (all.length === 0) {
     target.append(emptyState(view));
     return;
   }
   if (rows.length === 0) {
-    target.append(
-      el(
-        'div',
-        { class: 'empty' },
-        el('strong', {}, 'Nothing matches those filters'),
-        f.types.size === 0 ? 'Turn at least one type back on.' : 'Try a different search.',
-      ),
-    );
+    target.append(filteredEmpty(key, all, f));
     return;
   }
   const card = (r) => itemCard(r, r.first_seen_at > weekAgo, view === 'dismissed');
@@ -223,6 +275,53 @@ function renderReleases() {
     target.append(dayHeadingRow(group));
     for (const r of group.items) target.append(card(r));
   }
+}
+
+/**
+ * The empty list when there are rows but the filters hide every one. The
+ * wording and the one button come from emptyReason in feed.js, which works out
+ * which filter is actually responsible.
+ */
+function filteredEmpty(key, all, f) {
+  const why = emptyReason(all, f, key);
+  const act = why.action;
+  const apply = () => {
+    if (act.kind === 'show-held') f.held = true;
+    else if (act.kind === 'show-cinema') f.cinema = true;
+    else if (act.kind === 'widen') f.horizon = act.horizon;
+    else if (act.kind === 'types-on') f.types = new Set(ALL_TYPES);
+    else if (act.kind === 'clear-search') f.q = '';
+    else resetFilters(key);
+    buildFilterBar(key);
+    renderReleases();
+    // The button has gone with the empty state, so the keyboard goes to the
+    // first row it brought back, or the search box if there is none.
+    const list = key === 'upcoming' ? $('#upcoming-list') : $('#out-list');
+    (list.querySelector('.card button') ?? $(`#filters-${key} .search`))?.focus();
+  };
+  return el(
+    'div',
+    { class: 'empty', role: 'status' },
+    el('strong', {}, why.title),
+    el('span', {}, why.hint),
+    act
+      ? el(
+          'div',
+          { class: 'empty-actions' },
+          el('button', { type: 'button', class: 'btn btn-tiny', onclick: apply }, act.label),
+        )
+      : null,
+  );
+}
+
+function resetFilters(key) {
+  const f = state.filters[key];
+  f.q = '';
+  f.types = new Set(ALL_TYPES);
+  f.sort = key === 'upcoming' ? 'soonest' : 'date-desc';
+  if (f.horizon !== undefined) f.horizon = DEFAULT_HORIZONS[key];
+  f.cinema = false;
+  f.held = DEFAULT_HELD[key];
 }
 
 const DATE_SORTS = new Set(['date-desc', 'date-asc', 'soonest']);
@@ -272,12 +371,7 @@ function summaryFor(key, shown, total, f, view) {
             type: 'button',
             class: 'btn btn-tiny',
             onclick: () => {
-              f.q = '';
-              f.types = new Set(ALL_TYPES);
-              f.sort = def;
-              if (f.horizon !== undefined) f.horizon = DEFAULT_HORIZONS[key];
-              f.cinema = false;
-              f.held = DEFAULT_HELD[key];
+              resetFilters(key);
               buildFilterBar(key);
               renderReleases();
               // This button goes with the summary it sat in, so focus moves
@@ -292,7 +386,7 @@ function summaryFor(key, shown, total, f, view) {
 }
 
 function itemCard(r, isNew, dismissed) {
-  const card = el('article', { class: `card${dismissed ? ' is-dismissed' : ''}` });
+  const card = el('article', { class: `card feed-row${dismissed ? ' is-dismissed' : ''}` });
   const toggleEpisodes = () => {
     const open = card.querySelector('.episode-list');
     if (open) {
@@ -336,14 +430,19 @@ function itemCard(r, isNew, dismissed) {
     );
   };
 
+  const partial = formatPartialDate(r.date, r.date_precision);
   card.append(
     // Films and shows have 2:3 posters, and a square box would crop the title off them.
     artwork(r.thumb, r.title, r.kind === 'movie' || r.kind === 'show'),
     el(
       'div',
-      {},
-      el('p', { class: 'card-title' }, r.title),
-      el('p', { class: 'card-artist' }, r.subtitle || ''),
+      { class: 'feed-main' },
+      el(
+        'p',
+        { class: 'feed-line' },
+        el('span', { class: 'card-title' }, r.title),
+        r.subtitle ? el('span', { class: 'card-artist' }, r.subtitle) : null,
+      ),
       el(
         'div',
         { class: 'card-meta' },
@@ -363,15 +462,15 @@ function itemCard(r, isNew, dismissed) {
         isNew && !dismissed && r.in_library !== 1
           ? el('span', { class: 'tag new' }, 'New')
           : null,
-        el('span', { class: 'tag' }, KIND_TAG[r.kind] ?? r.kind),
-        eventTag(r.event),
+        ...kindTags(r),
         r.date_kind ? el('span', { class: `tag date-${r.date_kind}` }, r.date_kind) : null,
-        ...(formatPartialDate(r.date, r.date_precision)
-          ? [el('span', { title: 'MusicBrainz has not announced the day' }, formatPartialDate(r.date, r.date_precision))]
-          : [
-              el('span', {}, formatWhen(r.date, r.air_stamp)),
-              el('span', {}, `· ${relativeWhen(r.date, r.air_stamp)}`),
-            ]),
+        partial
+          ? el('span', { title: 'MusicBrainz has not announced the day' }, partial)
+          : el(
+              'span',
+              { class: 'feed-when' },
+              `${formatWhen(r.date, r.air_stamp)} · ${relativeWhen(r.date, r.air_stamp)}`,
+            ),
       ),
     ),
     el(
@@ -380,28 +479,25 @@ function itemCard(r, isNew, dismissed) {
       r.isGroup
         ? el(
             'button',
-            { class: 'btn btn-tiny', onclick: toggleEpisodes },
+            {
+              type: 'button',
+              class: 'btn btn-tiny',
+              'aria-expanded': false,
+              onclick: (e) => {
+                toggleEpisodes();
+                e.currentTarget.setAttribute('aria-expanded', String(Boolean(card.querySelector('.episode-list'))));
+              },
+            },
             `${r.episodes.length} episodes`,
           )
         : null,
       el(
         'button',
-        { class: 'btn btn-tiny', onclick: () => togglePlayer(r, card) },
+        { type: 'button', class: 'btn btn-tiny', onclick: () => togglePlayer(r, card) },
         r.kind === 'movie' || r.kind === 'show' ? 'Trailer' : 'Play',
       ),
-      safeHref(r.plex_link)
-        ? el(
-            'a',
-            { class: 'link', href: safeHref(r.plex_link), target: '_blank', rel: 'noreferrer' },
-            'Open in Plex',
-          )
-        : safeHref(r.link)
-          ? el(
-              'a',
-              { class: 'link', href: safeHref(r.link), target: '_blank', rel: 'noreferrer' },
-              r.source === 'music' ? 'MusicBrainz' : 'Plex',
-            )
-          : null,
+      linkButton(r.plex_link, 'Open in Plex') ??
+        linkButton(r.link, r.source === 'music' ? 'MusicBrainz' : 'Plex'),
       (() => {
         const targets = r.isGroup ? r.episodes : [r];
         // Each row is its own request, so one failing part way through a run
@@ -461,6 +557,17 @@ function itemCard(r, isNew, dismissed) {
     ),
   );
   return card;
+}
+
+/**
+ * One tag saying what a row is. An episode is already a show, so it carries
+ * just its event (episode, season premiere and so on) rather than both. A
+ * collapsed run carries none, since its button already says how many
+ * episodes it holds.
+ */
+function kindTags(r) {
+  if (r.source === 'episode') return r.isGroup ? [] : [eventTag(r.event ?? 'episode')];
+  return [el('span', { class: 'tag' }, KIND_TAG[r.kind] ?? r.kind), eventTag(r.event)];
 }
 
 function emptyState(view) {

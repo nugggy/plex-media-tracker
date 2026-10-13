@@ -2,11 +2,11 @@
  * Library, Housekeeping: missing episodes, duplicates and upgrades.
  */
 
-import { fold, plural } from '../feed.js';
+import { cmp, fold, plural } from '../feed.js';
 import { $, banner, el } from '../lib/dom.js';
 import { api } from '../lib/api.js';
 import { state } from '../lib/state.js';
-import { plexHref, plexLink, tile } from '../components.js';
+import { artwork, drawLongList, plexHref, plexLink, releaseArtwork, tile } from '../components.js';
 
 const RES_LABEL = { sd: 'SD', '480': '480p', '576': '576p', '720': '720p', '1080': '1080p', '4k': '4K' };
 
@@ -41,6 +41,7 @@ function renderLibrary() {
 
   renderMissing();
 
+  releaseArtwork($('#dupes-list'));
   $('#dupes-list').replaceChildren(
     ...(r.duplicates.length
       ? r.duplicates.slice(0, 200).map((d) =>
@@ -53,6 +54,7 @@ function renderLibrary() {
               gb(d.size),
             ],
             d.rating_key,
+            d.thumb,
           ),
         )
       : [el('div', { class: 'empty' }, el('strong', {}, 'No duplicates'), 'Nothing is held twice.')]),
@@ -63,13 +65,36 @@ function renderLibrary() {
     ? `Films held below 1080p. ${plural(totalLow, 'film')} could be replaced.`
     : 'Films held below 1080p.';
 
-  $('#upgrades-list').replaceChildren(
-    ...(totalLow
-      ? r.upgrades.slice(0, 200).map((u) =>
-          simpleRow(u.title, [u.year, RES_LABEL[String(u.resolution)] ?? u.resolution, u.codec, gb(u.size)], u.rating_key),
-        )
-      : [el('div', { class: 'empty' }, el('strong', {}, 'Nothing to upgrade'), 'Every film is 1080p or better.')]),
-  );
+  renderUpgrades();
+}
+
+/** Worth upgrading runs A to Z by title, a page at a time, with a letter bar. */
+function renderUpgrades() {
+  const r = state.library;
+  const list = $('#upgrades-list');
+  releaseArtwork(list);
+  list.replaceChildren();
+  if (!r.upgrades.length) {
+    document.getElementById('upgrades-list-jump')?.remove();
+    list.append(el('div', { class: 'empty' }, el('strong', {}, 'Nothing to upgrade'), 'Every film is 1080p or better.'));
+    return;
+  }
+  const rows = [...r.upgrades].sort((a, b) => cmp(a.title, b.title));
+  drawLongList({
+    list,
+    rows,
+    draw: (u) =>
+      simpleRow(
+        u.title,
+        [u.year, RES_LABEL[String(u.resolution)] ?? u.resolution, u.codec, gb(u.size)],
+        u.rating_key,
+        u.thumb,
+      ),
+    name: 'upgrades',
+    redraw: renderUpgrades,
+    keyOf: (u) => u.title,
+    noun: 'film',
+  });
 }
 
 function renderMissing() {
@@ -79,6 +104,7 @@ function renderMissing() {
   const rows = r.missing.filter((m) => !q || fold(m.show).includes(q));
 
   const list = $('#missing-list');
+  releaseArtwork(list);
   list.replaceChildren();
   if (rows.length === 0) {
     list.append(
@@ -99,7 +125,7 @@ function renderMissing() {
       el(
         'div',
         { class: 'artist-row' },
-        el('div', { class: 'art art-fallback' }, (m.show || '?').charAt(0).toUpperCase()),
+        artwork(m.thumb, m.show, true),
         el(
           'div',
           {},
@@ -124,11 +150,15 @@ function renderMissing() {
   }
 }
 
-function simpleRow(title, bits, ratingKey) {
+/**
+ * One housekeeping row. The poster comes through /thumb when the server sent
+ * one; without it, or if it fails to load, the title's first letter stands in.
+ */
+function simpleRow(title, bits, ratingKey, thumb = null) {
   return el(
     'div',
     { class: 'artist-row' },
-    el('div', { class: 'art art-fallback' }, (title || '?').charAt(0).toUpperCase()),
+    artwork(thumb, title, true),
     el(
       'div',
       {},

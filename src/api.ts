@@ -20,6 +20,7 @@ import {
   lyricsProgress,
   getLyric,
   saveLyric,
+  lyricCounts,
   type Track,
 } from './lyrics.ts';
 import { posterUrl, verifyAccount } from './plexdiscover.ts';
@@ -30,7 +31,8 @@ import { isMbid } from './matching.ts';
 import { resolve as resolveYoutube, clearCache as clearYoutubeCache } from './youtube.ts';
 import { buildSuggestions, listSuggestions, hideSuggestion } from './suggestions.ts';
 import { listTrending, buildTrending, hideTrending, builtAt } from './trending.ts';
-import { sydneyDate } from './dates.ts';
+import { trendingJob, maybeAutoBuildTrending, trendingIsStale } from './trendingauto.ts';
+import { sydneyDate, today, shiftDate } from './dates.ts';
 import { episodeFeed, dismissEpisode } from './episodes.ts';
 import { libraryReport, deepLink } from './library.ts';
 import {
@@ -42,7 +44,18 @@ import {
   isSearchThumbHost,
 } from './search.ts';
 import { getDetails } from './details.ts';
-import { nowPlaying, stopStream, libraryStats, recentlyAdded, history, isPlexArtPath, resizedArtPath } from './dash.ts';
+import {
+  nowPlaying,
+  stopStream,
+  libraryStats,
+  recentlyAdded,
+  history,
+  isPlexArtPath,
+  resizedArtPath,
+  cachedTrackCount,
+  rememberTrackCount,
+  refreshTrackCount,
+} from './dash.ts';
 
 /**
  * A key on the home Plex server is a plain number. Anything a request hands
@@ -126,6 +139,9 @@ const SETTABLE = new Set([
   'sync_on_start',
   'tmdb_api_key',
 ]);
+
+/** The settings that decide how the Plex server is reached. */
+const CONNECTION_KEYS = ['plex_url', 'plex_token', 'plex_connection', 'plex_machine_id'];
 
 /* ------------------------------------------------------------ unified feed */
 
@@ -226,6 +242,33 @@ function buildFeed(kind: 'out' | 'upcoming' | 'dismissed', recentDays: number): 
   return items;
 }
 
+/** The kinds the Coming soon view lists by default. Mirrors ALL_TYPES in public/feed.js. */
+const FEED_KINDS = new Set(['album', 'ep', 'movie', 'show']);
+
+/**
+ * How many rows Coming soon shows as it first opens: the next seven days in
+ * Sydney, things already on the server included, cinema-only films left out,
+ * and each show's episodes folded into one row the way the page groups them.
+ * Mirrors applyFilters, DEFAULT_HORIZONS and DEFAULT_HELD in public/feed.js,
+ * which is the view this number has to agree with.
+ */
+export function upcomingWeekCount(rows: FeedItem[], from: string = today()): number {
+  const cutoff = shiftDate(from, 7);
+  const shows = new Set<string>();
+  let n = 0;
+  for (const r of rows) {
+    if (r.date && r.date > cutoff) continue;
+    if (r.date_kind === 'cinema') continue;
+    if (!FEED_KINDS.has(r.kind)) continue;
+    if (r.source === 'episode' && r.group) {
+      if (shows.has(r.group)) continue;
+      shows.add(r.group);
+    }
+    n += 1;
+  }
+  return n;
+}
+
 /* ------------------------------------------------------------------ routes */
 
 /**
@@ -257,7 +300,10 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
       counts: {
         out: music.out + watch.out + eps.out,
         upcoming: music.upcoming + watch.upcoming + eps.upcoming,
+        upcoming_week: upcomingWeekCount(buildFeed('upcoming', recentDays)),
         artists: music.artists,
+        artists_active: music.artists,
+        artists_present: music.artists_present,
         unresolved: music.unresolved,
         watchlist: watch.listed,
       },
@@ -311,6 +357,9 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
     if (!key) return bad(res, 'plex_key is required');
     if (mbid && !isMbid(mbid)) return bad(res, 'That does not look like a MusicBrainz artist ID.');
     store.setArtistMbid(key, mbid || null, mbid ? 'manual' : 'pending');
+    // Pointing a Plex artist at the ID of one followed by hand makes them the
+    // same artist, so the two rows become one straight away.
+    if (mbid) store.mergeManualArtists();
     send(res, 200, { ok: true });
   },
 
@@ -540,10 +589,15 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
     const builtDates = Object.fromEntries(
       Object.entries(at).map(([kind, iso]) => [kind, iso ? sydneyDate(iso) : null]),
     );
+    // Opening the tab on charts more than a week old starts a rebuild behind
+    // the answer; the page sees `building` and polls progress as for a press.
+    maybeAutoBuildTrending();
     send(res, 200, {
       items: listTrending(),
       built_at: builtDates,
       has_tmdb_key: store.getSetting('tmdb_api_key').trim() !== '',
+      stale: trendingIsStale(),
+      building: trendingJob.progress().running,
     });
   },
 
@@ -634,6 +688,8 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
             ? fetchTracks(base, token, album, 'album')
             : fetchTracks(base, token, artist, 'artist'),
       );
+      // The whole library was just listed, which is as good a count as any.
+      if (library) rememberTrackCount(tracks.length);
       send(res, 200, {
         tracks: trackStates(tracks),
         albums: artist ? store.albumsOf(artist).map((a) => ({ plex_key: a.plex_key, title: a.title, year: a.year })) : [],
@@ -663,6 +719,17 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
     // Not awaited: a whole library is thousands of files; the page polls progress.
     void exportLyrics(keys);
     send(res, 202, { started: true, count: keys.length });
+  },
+
+  /**
+   * Answers from stored numbers only. The track count is the one Plex last
+   * gave; when there is none for this library, or it is a day old, one quick
+   * read is started behind the answer, so the next asking has it.
+   */
+  'GET /api/lyrics/summary': async (req, res, url) => {
+    const { tracks, fresh } = cachedTrackCount();
+    if (!fresh && store.isConfigured()) void refreshTrackCount().catch(() => {});
+    send(res, 200, { tracks, ...lyricCounts() });
   },
 
   'GET /api/lyrics/progress': async (req, res, url) => {
@@ -709,15 +776,20 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
     if (body.plex_section !== undefined && body.plex_section !== '' && !isPlexKey(String(body.plex_section))) {
       return bad(res, 'plex_section must be a Plex library key.');
     }
+    // Each Settings section saves on its own and sends only its own keys, so
+    // only the keys present are written; anything absent is left as it was.
     for (const [key, value] of Object.entries(body)) {
       if (!SETTABLE.has(key)) continue;
       if ((key === 'plex_token' || key === 'tmdb_api_key') && value === '********') continue;
       store.setSetting(key, String(value));
     }
     // Automatic mode has no typed address, so find one now. If the server
-    // cannot be reached this minute, the next check tries again.
+    // cannot be reached this minute, the next check tries again. Only a save
+    // that touched the connection asks plex.tv: saving the feed options has
+    // nothing to do with where the server is, and should not wait on it.
     let warning: string | null = null;
-    if (store.getSetting('plex_connection') === 'auto') {
+    const touchesConnection = CONNECTION_KEYS.some((k) => body[k] !== undefined);
+    if (touchesConnection && store.getSetting('plex_connection') === 'auto') {
       try {
         await ensurePlexUrl();
       } catch (err) {
@@ -827,7 +899,6 @@ export async function handleApi(
 }
 
 const suggestionsJob = createJob();
-const trendingJob = createJob();
 
 /** The token from a settings form, or the saved one when the form holds the mask. */
 function tokenFrom(body: Record<string, unknown>): string {
@@ -953,8 +1024,15 @@ async function proxyThumb(
     const row = wl.getWatchlistRow(watchlistKey);
     target = row ? posterUrl(token, row.thumb) : null;
   } else if (plexKey) {
+    // An artist's stored thumb first, as the releases feed has always used.
+    // Any other key on the home server (a film, episode or show from the
+    // Library tab) gets that item's own poster, shrunk by Plex to card size.
+    // Only a plain number gets that far, so the path cannot be steered.
     const artist = store.getArtist(plexKey);
-    target = artist ? thumbUrl(store.getSetting('plex_url'), token, artist.thumb) : null;
+    if (artist) target = thumbUrl(store.getSetting('plex_url'), token, artist.thumb);
+    else if (isPlexKey(plexKey) && store.getSetting('plex_url')) {
+      target = thumbUrl(store.getSetting('plex_url'), token, resizedArtPath(`/library/metadata/${plexKey}/thumb`));
+    }
   }
 
   if (!target) {

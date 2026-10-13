@@ -8,6 +8,7 @@ import { $$, banner, el, safeHref } from './lib/dom.js';
 import { api, post } from './lib/api.js';
 import { state } from './lib/state.js';
 import { refreshState } from './views/status.js';
+import { jumpLetters } from './feed.js';
 
 /* -------------------------------------------------------- youtube player */
 
@@ -86,13 +87,7 @@ export async function togglePlayer(item, card) {
           el(
             'span',
             { class: 'card-actions' },
-            safeHref(r.search_url)
-              ? el(
-                  'a',
-                  { class: 'link', href: safeHref(r.search_url), target: '_blank', rel: 'noreferrer' },
-                  'Wrong one?',
-                )
-              : null,
+            linkButton(r.search_url, 'Wrong one?', 'Search YouTube yourself'),
             collapseBtn,
             el(
               'button',
@@ -110,13 +105,7 @@ export async function togglePlayer(item, card) {
     } else {
       holder.append(
         el('span', { class: 'muted small' }, 'No video found automatically. '),
-        safeHref(r.search_url)
-          ? el(
-              'a',
-              { class: 'link', href: safeHref(r.search_url), target: '_blank', rel: 'noreferrer' },
-              'Search YouTube',
-            )
-          : null,
+        linkButton(r.search_url, 'Search YouTube'),
       );
     }
   } catch (err) {
@@ -272,20 +261,43 @@ function artworkObserver() {
 
 export function artwork(src, name, poster = false) {
   const cls = poster ? 'art art-poster' : 'art';
-  const fallback = () =>
-    img.replaceWith(el('div', { class: `${cls} art-fallback` }, (name || '?').charAt(0).toUpperCase()));
+  const letter = () => el('div', { class: `${cls} art-fallback`, 'aria-hidden': 'true' }, (name || '?').charAt(0).toUpperCase());
+  // With no picture at all there is nothing to wait for. An img with no src
+  // never fires error, so it would sit there as an empty box.
+  if (!src) return letter();
+  const fallback = () => img.replaceWith(letter());
   // The phone app cannot load /thumb as a plain image address, so it supplies
   // a loader that fetches the picture and hands back a local address.
   const loader = window.pmtThumbLoader;
   const img = el('img', { class: cls, src: loader ? null : src, alt: '', loading: 'lazy' });
   img.addEventListener('error', fallback);
   if (loader) {
-    if (!src) queueMicrotask(fallback);
     // Fetched only once on screen, the way loading="lazy" works for a plain image.
-    else artworkObserver().observe(img);
-    img.dataset.src = src || '';
+    artworkObserver().observe(img);
+    img.dataset.src = src;
   }
   return img;
+}
+
+/* ----------------------------------------------------------------- badges */
+
+/**
+ * Sets a count on every badge of that name. The top tabs and the phone's
+ * bottom bar each carry one, so both are kept in step. The label says what the
+ * number counts: it is the badge's tooltip, and it is added to the tab's name
+ * for screen readers, since a bare number read after "Coming soon" says
+ * nothing about which number it is.
+ */
+export function setBadge(name, n, label, hideZero = false) {
+  for (const pill of document.querySelectorAll(`[data-count="${name}"]`)) {
+    pill.textContent = String(n);
+    pill.title = label;
+    pill.hidden = hideZero && !n;
+    const tab = pill.closest('[role="tab"]');
+    if (tab?.dataset.label) {
+      tab.setAttribute('aria-label', pill.hidden ? tab.dataset.label : `${tab.dataset.label}, ${label}`);
+    }
+  }
 }
 
 /* ------------------------------------------------------- tiles and links */
@@ -301,11 +313,125 @@ export function tile(label, value, note) {
   );
 }
 
-/** A link into the Plex app, or nothing when the server id is not known yet. */
-export function plexLink(url, label = 'Open in Plex') {
+/**
+ * A link that sits among a row's buttons, drawn as a quiet button so it reads
+ * as something to press rather than stray orange text. It stays an <a>, so it
+ * opens in a new tab and can be copied like any link. Nothing is drawn for an
+ * address safeHref will not pass.
+ */
+export function linkButton(url, label, title = null) {
   const href = safeHref(url);
   if (!href) return null;
-  return el('a', { class: 'link', href, target: '_blank', rel: 'noreferrer' }, label);
+  return el(
+    'a',
+    { class: 'btn btn-tiny btn-ghost btn-out', href, target: '_blank', rel: 'noreferrer', title },
+    label,
+  );
+}
+
+/** A link into the Plex app, or nothing when the server id is not known yet. */
+export function plexLink(url, label = 'Open in Plex') {
+  return linkButton(url, label);
+}
+
+/* ------------------------------------------------------------ poster grid */
+
+/**
+ * The trailer player for a card in a poster grid. A card there is too narrow
+ * to hold a video, so the player goes in a slot straight after the card that
+ * spans the whole row of the grid.
+ */
+export function gridPlayer(item, card) {
+  let slot = card.nextElementSibling;
+  if (!slot?.classList.contains('grid-slot')) {
+    slot = el('div', { class: 'grid-slot' });
+    card.after(slot);
+  }
+  return togglePlayer(item, slot);
+}
+
+/* -------------------------------------------------------------- long lists */
+
+/**
+ * Draws a long, sorted list a page at a time, with an optional A to Z bar
+ * above it that offers only the letters present.
+ *
+ * rows are already sorted; keyOf gives the key they were sorted by, so a
+ * letter in the bar leads to where that letter really starts. limits[name] is
+ * how many rows are drawn, and redraw is the view's own render function, which
+ * is called again when Show more or a letter beyond the drawn rows is pressed.
+ */
+export function drawLongList({ list, rows, draw, name, redraw, keyOf = null, page = 100, noun = 'item' }) {
+  const limits = state.limits;
+  const limit = Math.max(page, limits[name] ?? page);
+  const jumpId = `${list.id}-jump`;
+  document.getElementById(jumpId)?.remove();
+
+  const letters = keyOf ? jumpLetters(rows.map(keyOf)) : [];
+  const firstOf = new Map(letters.map((l) => [l.index, l.letter]));
+  if (letters.length > 1) {
+    list.before(
+      el(
+        'nav',
+        { class: 'jumpbar', id: jumpId, 'aria-label': 'Jump to a letter' },
+        letters.map(({ letter, index }) =>
+          el(
+            'button',
+            {
+              type: 'button',
+              class: 'jump',
+              'aria-label': letter === '#' ? 'Jump to numbers and symbols' : `Jump to ${letter}`,
+              onclick: () => {
+                if (index >= limits[name]) {
+                  limits[name] = Math.ceil((index + 1) / page) * page;
+                  redraw();
+                }
+                const target = list.querySelector(`[data-letter="${CSS.escape(letter)}"]`);
+                if (!target) return;
+                target.scrollIntoView({ block: 'start' });
+                target.focus({ preventScroll: true });
+              },
+            },
+            letter,
+          ),
+        ),
+      ),
+    );
+  }
+
+  rows.slice(0, limit).forEach((row, i) => {
+    const node = draw(row);
+    if (firstOf.has(i)) {
+      node.dataset.letter = firstOf.get(i);
+      // Focusable from script only, so a jump lands the keyboard on the row.
+      node.tabIndex = -1;
+    }
+    list.append(node);
+  });
+
+  if (rows.length > limit) {
+    list.append(
+      el(
+        'div',
+        { class: 'filter-summary show-more' },
+        el('span', {}, `Showing ${limit} of ${rows.length} ${noun}s.`),
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'btn btn-tiny',
+            onclick: () => {
+              limits[name] = limit + page;
+              redraw();
+              // Keep the keyboard where the new rows start, not back at the top.
+              list.children[limit]?.querySelector('button, a')?.focus();
+            },
+          },
+          'Show more',
+        ),
+      ),
+    );
+  }
 }
 
 /** Built here so the server id only has to travel once, on /api/state. */

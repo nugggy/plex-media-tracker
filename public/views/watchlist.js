@@ -4,12 +4,14 @@
  */
 
 import { cmp, fold, plural, formatDate } from '../feed.js';
-import { $, banner, el, safeHref } from '../lib/dom.js';
+import { $, banner, el } from '../lib/dom.js';
 import { api, post } from '../lib/api.js';
 import { state } from '../lib/state.js';
 import {
   addToWatchlistButton,
   artwork,
+  drawLongList,
+  linkButton,
   releaseArtwork,
   togglePlayer,
   wireChips,
@@ -70,14 +72,21 @@ function renderWatchlist() {
     );
     return;
   }
-  for (const item of rows) list.append(watchlistRow(item));
+  drawLongList({
+    list,
+    rows,
+    draw: watchlistRow,
+    name: 'watchlist',
+    redraw: renderWatchlist,
+    // Letters only while the list runs A to Z, keyed on the title it is sorted by.
+    keyOf: f.sort === 'title' ? (i) => i.title : null,
+  });
 }
 
 function watchlistRow(item) {
   const sub = [
     item.year,
     item.type === 'show' && item.season_count ? plural(item.season_count, 'season') : null,
-    item.in_library ? 'in your library' : null,
     item.release_date ? formatDate(item.release_date) : null,
   ]
     .filter(Boolean)
@@ -85,7 +94,7 @@ function watchlistRow(item) {
 
   const row = el('div', { class: 'artist-row' });
   row.append(
-    artwork(item.thumb_url, item.title),
+    artwork(item.thumb_url, item.title, true),
     el(
       'div',
       {},
@@ -95,10 +104,15 @@ function watchlistRow(item) {
     el(
       'div',
       { class: 'card-actions' },
+      // Most of the watchlist is already held, so only the exception is tagged.
+      item.in_library
+        ? null
+        : el('span', { class: 'tag not-held', title: 'Not on your Plex server yet' }, 'Not in your library'),
       el('span', { class: 'tag' }, item.type === 'movie' ? 'film' : 'show'),
       el(
         'button',
         {
+          type: 'button',
           class: 'btn btn-tiny',
           onclick: () =>
             togglePlayer(
@@ -113,13 +127,7 @@ function watchlistRow(item) {
         },
         'Trailer',
       ),
-      safeHref(item.public_url)
-        ? el(
-            'a',
-            { class: 'link', href: safeHref(item.public_url), target: '_blank', rel: 'noreferrer' },
-            'Plex',
-          )
-        : null,
+      linkButton(item.public_url, 'Plex', 'Open on watch.plex.tv'),
       el(
         'button',
         {
@@ -148,11 +156,13 @@ function watchlistRow(item) {
 
 $('#wl-filter').addEventListener('input', (e) => {
   state.wlFilters.q = e.target.value;
+  state.limits.watchlist = 100;
   renderWatchlist();
 });
 
 $('#wl-sort').addEventListener('change', (e) => {
   state.wlFilters.sort = e.target.value;
+  state.limits.watchlist = 100;
   renderWatchlist();
 });
 

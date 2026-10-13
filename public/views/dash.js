@@ -6,7 +6,7 @@ import { plural } from '../feed.js';
 import { $, banner, el, safeHref } from '../lib/dom.js';
 import { api, post } from '../lib/api.js';
 import { state } from '../lib/state.js';
-import { artwork, plexHref, releaseArtwork, tile } from '../components.js';
+import { artwork, plexHref, releaseArtwork, setBadge, tile } from '../components.js';
 
 /* -------------------------------------------------------------- dashboard */
 
@@ -49,9 +49,7 @@ async function refreshNowPlaying() {
   const list = $('#np-list');
   try {
     const { streams, bandwidth_kbps } = await api('/api/dash/sessions');
-    const pill = $('#count-streams');
-    pill.textContent = streams.length;
-    pill.hidden = streams.length === 0;
+    setBadge('streams', streams.length, `${plural(streams.length, 'stream')} playing now`, true);
 
     const transcodes = streams.filter((s) => s.decision === 'Transcode').length;
     $('#np-summary').textContent = streams.length
@@ -192,7 +190,7 @@ async function loadDashLibrary() {
             return el(
               href ? 'a' : 'div',
               { class: 'added-item', href, target: href ? '_blank' : null, rel: href ? 'noreferrer' : null },
-              artwork(a.thumb, a.title),
+              artwork(a.thumb, a.title, true),
               el('div', { class: 'added-title' }, a.title),
               el('div', { class: 'artist-sub' }, [a.subtitle, addedWhen(a.added_at)].filter(Boolean).join(' · ')),
             );
@@ -230,15 +228,15 @@ async function loadHistory() {
         ? h.recent.map((p) =>
             el(
               'div',
-              { class: 'artist-row poster-row' },
-              artwork(p.thumb, p.title),
+              { class: 'play-row' },
+              artwork(p.thumb, p.title, true),
               el(
                 'div',
-                {},
-                el('div', { class: 'artist-name' }, p.title),
+                { class: 'play-main' },
+                el('div', { class: 'play-title' }, p.title),
                 el('div', { class: 'artist-sub' }, [p.subtitle, p.user, p.platform].filter(Boolean).join(' · ')),
               ),
-              el('div', { class: 'muted small' }, playedWhen(p.viewed_at)),
+              el('time', { class: 'muted small play-when' }, playedWhen(p.viewed_at)),
             ),
           )
         : [el('div', { class: 'empty' }, el('strong', {}, 'No plays'), 'Nothing was watched or listened to in this period.')]),

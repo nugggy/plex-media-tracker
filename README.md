@@ -52,6 +52,10 @@ Discover, Library and Settings. Following, Discover and Library each hold a
 few views, picked by a switch at the top of the page, and each remembers the
 view you last had open.
 
+On a phone, or any narrow window, the tabs move to a bar along the bottom with
+five buttons: Out now, Coming soon, Dashboard, Following and More. More holds
+Discover, Library and Settings.
+
 **Out now** is what has landed recently. It opens on the whole window the app
 tracks, which is the "treat a release as recent for" setting, so the list and
 the number on the tab cover the same period. It also opens with **Hide what I
@@ -60,10 +64,11 @@ that has landed, including what is already on your server. Those rows carry a
 green **In Plex** tick. For shows the tick is per episode, not per series, so an
 aired episode you have not downloaded stays unticked.
 
-The number on the tab counts what there is still for you to get, so it leaves
-out anything already on your server and anything showing only in cinemas. On the
-default view the two match. Untick Hide what I have, or tick Cinema, and there
-will be more rows on screen than the tab counts.
+The number on each feed's tab always matches the "Showing" line under its
+filters, so it counts what the tab shows with its current window and filters.
+On the default views that is what there is still to get for Out now, and the
+next 7 days for Coming soon. When a filter hides everything, the empty list
+says which one, with a button to undo it.
 
 **Coming soon** is what is dated ahead. Defaults to the next 7 days. Both feeds
 carry the same controls: a search box, type chips for Albums, EPs,
@@ -99,9 +104,14 @@ Artists and Search.
 removes it from Plex as well, and removing it in Plex removes it here. There is
 an undo for the last removal.
 
-**Artists** lists everything watched for music. The status dropdown finds
-artists that could not be matched, and Fix lets you choose between artists
-sharing a name or paste a MusicBrainz ID. Mute stops watching someone.
+**Artists** lists everything watched for music. It opens on the active
+artists, the ones not muted, and the status dropdown also finds artists that
+could not be matched. Fix lets you choose between artists sharing a name or
+paste a MusicBrainz ID. Mute stops watching someone. An artist you followed by
+hand who later turns up in your Plex library is merged into one entry.
+
+Long lists (the watchlist, artists and films worth upgrading) load a hundred
+rows at a time and have an A to Z bar for jumping to a letter.
 
 **Search** looks up a film, show or artist and adds it without leaving the app.
 **Details** on a film or show opens the synopsis, cast, director, runtime and
@@ -151,7 +161,11 @@ rank is Apple's own chart position; for films and shows it is
 our position after removing TMDB's duplicate entries, not TMDB's.
 
 Building the chart takes a little over two minutes, most of it MusicBrainz
-matching each country artist at its one-request-a-second limit.
+matching each country artist at its one-request-a-second limit. The charts
+are weekly, so once they are more than a week old the app rebuilds them on its
+own, when it starts or when you open Trending. It waits while a music scan is
+running, and after a failed rebuild it leaves it six hours before trying
+again.
 
 **Friends** shows what the friends on your Plex account have on their
 watchlists, read live from plex.tv and kept for half an hour. Plex shares a

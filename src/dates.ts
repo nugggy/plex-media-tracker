@@ -31,6 +31,16 @@ export function daysAhead(days: number): string {
 }
 
 /**
+ * A calendar date moved by whole days, worked through UTC midnight so no
+ * daylight saving change can shift it. The page's own feed filter does the
+ * same, so a count made here lands on exactly the day the page cuts off at.
+ */
+export function shiftDate(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
+}
+
+/**
  * Timestamps stay in UTC. Only calendar dates are localised, so stored
  * instants remain unambiguous and sortable.
  */

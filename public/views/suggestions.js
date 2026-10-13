@@ -3,15 +3,16 @@
  */
 
 import { fold, plural, filterSuggestionYears, dropFollowed } from '../feed.js';
-import { $, banner, el, safeHref } from '../lib/dom.js';
+import { $, banner, el } from '../lib/dom.js';
 import { api, poller, post } from '../lib/api.js';
 import { state } from '../lib/state.js';
 import {
   addToWatchlistButton,
   artwork,
   confirmingButton,
+  gridPlayer,
+  linkButton,
   releaseArtwork,
-  togglePlayer,
   wireChips,
 } from '../components.js';
 
@@ -71,69 +72,67 @@ function renderSuggestions() {
 
 const SG_TAG = { artist: 'artist', movie: 'film', show: 'show' };
 
+/**
+ * One suggestion as a poster, like Recently added on the Dashboard: picture,
+ * title and year, what it is and why it was suggested, then its actions as
+ * ordinary buttons beneath, so each is in the Tab order.
+ */
 function suggestionCard(s) {
-  const card = el('article', { class: 'card' });
+  const card = el('article', { class: 'poster-card' });
   // A poster comes from TMDB and an artist photograph from Wikimedia, both
   // through the same proxy the rest of the app uses, so the page never talks
   // to either host directly.
-  const art = s.thumb
-    ? artwork(`/thumb?url=${encodeURIComponent(s.thumb)}`, s.title)
-    : el('div', { class: 'art art-fallback' }, (s.title || '?').charAt(0).toUpperCase());
+  const art = artwork(s.thumb ? `/thumb?url=${encodeURIComponent(s.thumb)}` : null, s.title, true);
+  const because = s.seeds?.length ? `Because you have ${s.seeds.slice(0, 3).join(', ')}` : '';
 
   card.append(
-    art,
+    el('div', { class: 'poster-art' }, art),
     el(
       'div',
-      {},
+      { class: 'poster-body' },
       el(
         'p',
-        { class: 'card-title' },
+        { class: 'poster-title', title: s.title },
         s.title,
         s.year ? el('span', { class: 'muted' }, ` (${s.year})`) : null,
       ),
-      el('p', { class: 'card-artist' }, s.subtitle || ''),
-      // Clamped to two lines in the stylesheet so the list still scans. The
-      // whole synopsis is on the tooltip for anyone who wants it.
+      el('p', { class: 'poster-meta' }, [SG_TAG[s.kind] ?? s.kind, s.subtitle].filter(Boolean).join(' · ')),
+      // Clamped in the stylesheet so the grid still scans. The whole synopsis
+      // is on the tooltip for anyone who wants it.
       s.overview ? el('p', { class: 'card-blurb', title: s.overview }, s.overview) : null,
+      because ? el('p', { class: 'poster-why', title: because }, because) : null,
       el(
         'div',
-        { class: 'card-meta' },
-        el('span', { class: 'tag' }, SG_TAG[s.kind] ?? s.kind),
-        el('span', {}, `because you have ${s.seeds.slice(0, 3).join(', ')}`),
-      ),
-    ),
-    el(
-      'div',
-      { class: 'card-actions' },
-      el(
-        'button',
-        {
-          class: 'btn btn-tiny',
-          onclick: () =>
-            togglePlayer(
-              {
-                kind: s.kind === 'artist' ? 'single' : s.kind,
-                title: s.title,
-                subtitle: s.kind === 'artist' ? s.title : '',
-                year: s.year,
-              },
-              card,
-            ),
-        },
-        s.kind === 'artist' ? 'Play' : 'Trailer',
-      ),
-      safeHref(s.link)
-        ? el('a', { class: 'link', href: safeHref(s.link), target: '_blank', rel: 'noreferrer' }, 'Details')
-        : null,
-      suggestionAction(s),
-      confirmingButton(
-        'Not for me',
-        'Hide, sure?',
-        async () => {
-          await post('/api/suggestions/hide', { kind: s.kind, id: s.id, hidden: true });
-          loadSuggestions();
-        },
-        'Hiding…',
+        { class: 'poster-actions' },
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'btn btn-tiny',
+            onclick: () =>
+              gridPlayer(
+                {
+                  kind: s.kind === 'artist' ? 'single' : s.kind,
+                  title: s.title,
+                  subtitle: s.kind === 'artist' ? s.title : '',
+                  year: s.year,
+                },
+                card,
+              ),
+          },
+          s.kind === 'artist' ? 'Play' : 'Trailer',
+        ),
+        linkButton(s.link, 'Details'),
+        suggestionAction(s),
+        confirmingButton(
+          'Not for me',
+          'Hide, sure?',
+          async () => {
+            await post('/api/suggestions/hide', { kind: s.kind, id: s.id, hidden: true });
+            loadSuggestions();
+          },
+          'Hiding…',
+        ),
       ),
     ),
   );

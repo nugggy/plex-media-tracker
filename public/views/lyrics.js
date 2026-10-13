@@ -12,6 +12,9 @@ import { ARM_MS } from '../components.js';
 
 export async function loadLyrics() {
   const ly = state.lyrics;
+  loadLyricSummary();
+  // Nothing picked yet: draw the empty state with its hint, not a blank page.
+  if (!ly.artist && !ly.loading) renderLyrics();
   if (ly.artistsLoaded) return;
   try {
     const { artists } = await api('/api/artists');
@@ -29,6 +32,40 @@ export async function loadLyrics() {
 
 /** The artist picker's value for every track in the music library. */
 const LYRICS_WHOLE_LIBRARY = '*';
+
+const count = (n) => Number(n).toLocaleString('en-AU');
+
+/**
+ * The line across the top of the tab, so it opens on how the whole library
+ * stands rather than an empty page. The server counts the library's tracks in
+ * the background, so the total can be missing at first; the line is drawn
+ * without it, and asked for once more a few seconds later.
+ */
+let summaryRetry = null;
+async function loadLyricSummary(retry = true) {
+  const line = $('#ly-overview');
+  const current = latest('lyric-summary');
+  clearTimeout(summaryRetry);
+  try {
+    const r = await api('/api/lyrics/summary');
+    if (!current()) return;
+    const parts = [
+      typeof r.tracks === 'number' ? `${count(r.tracks)} ${r.tracks === 1 ? 'track' : 'tracks'}` : null,
+      typeof r.with_lyrics === 'number' ? `${count(r.with_lyrics)} with lyrics` : null,
+      typeof r.saved_to_plex === 'number' ? `${count(r.saved_to_plex)} saved to Plex` : null,
+    ].filter(Boolean);
+    line.textContent = parts.join(' · ');
+    line.hidden = parts.length === 0;
+    if (r.tracks == null && retry) {
+      summaryRetry = setTimeout(() => {
+        if (state.tab === 'lyrics') loadLyricSummary(false);
+      }, 5000);
+    }
+  } catch {
+    // A server without the summary simply has no line.
+    if (current()) line.hidden = true;
+  }
+}
 
 async function loadLyricTracks() {
   const ly = state.lyrics;
@@ -112,12 +149,19 @@ function renderLyrics() {
       el(
         'div',
         { class: 'empty' },
-        el('strong', {}, ly.failed ? 'Could not read the tracks' : ly.artist ? 'No tracks' : 'Pick an artist'),
+        el('strong', {}, ly.failed ? 'Could not read the tracks' : ly.artist ? 'No tracks' : 'Nothing picked yet'),
         ly.failed
           ? 'Choose again to retry.'
           : ly.artist
             ? 'Plex lists nothing under this choice.'
-            : 'Or the whole library. Then choose an album, or leave it on all albums.',
+            : 'Pick an artist or the whole library to see tracks.',
+        !ly.failed && !ly.artist
+          ? el(
+              'div',
+              { class: 'empty-actions' },
+              el('button', { type: 'button', class: 'btn btn-tiny', onclick: chooseWholeLibrary }, 'Whole library'),
+            )
+          : null,
       ),
     );
     return;
@@ -279,6 +323,16 @@ function togglePaste(t, card) {
   input.focus();
 }
 
+/** The Whole library shortcut: the same as picking it from the artist list. */
+function chooseWholeLibrary() {
+  const select = $('#ly-artist');
+  select.value = LYRICS_WHOLE_LIBRARY;
+  select.dispatchEvent(new Event('change'));
+  select.focus();
+}
+
+$('#ly-whole').addEventListener('click', chooseWholeLibrary);
+
 $('#ly-artist').addEventListener('change', (e) => {
   state.lyrics.artist = e.target.value;
   state.lyrics.album = '';
@@ -363,7 +417,10 @@ async function pollLyrics() {
     if (running) $('#ly-fetch').disabled = true;
     if (!running) $('#ly-save').textContent = 'Save to Plex';
     if (message) banner(message, running ? 'info' : ok ? 'ok' : undefined);
-    if (!running) loadLyricTracks();
+    if (!running) {
+      loadLyricTracks();
+      loadLyricSummary();
+    }
     return running;
   } catch {
     state.lyrics.jobRunning = false;

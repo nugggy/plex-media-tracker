@@ -466,26 +466,6 @@ main {
   color: var(--muted);
 }
 
-/* Out now and Coming soon are about the artwork, so theirs is bigger. */
-#out-list .card,
-#upcoming-list .card {
-  grid-template-columns: 120px 1fr auto;
-}
-#out-list .art,
-#upcoming-list .art {
-  width: 120px;
-  height: 120px;
-  border-radius: 12px;
-}
-#out-list .art-fallback,
-#upcoming-list .art-fallback {
-  font-size: 40px;
-}
-/* A film or show poster is 2:3, so its box is too: the whole poster, title and all. */
-#out-list .art-poster,
-#upcoming-list .art-poster {
-  height: 180px;
-}
 
 .card-title {
   font-weight: 600;
@@ -522,13 +502,19 @@ main {
   color: var(--muted);
 }
 
+/* A tag is a label, not a control: no border, a faint fill and small type, so
+   it never reads as one of the buttons beside it. */
 .tag {
-  padding: 1px 7px;
-  border-radius: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  font-size: 11.5px;
+  display: inline-block;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--well);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 18px;
   text-transform: lowercase;
+  white-space: nowrap;
 }
 .tag.new {
   background: var(--accent-soft);
@@ -542,6 +528,24 @@ main {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+/* A link that sits among buttons is drawn as one, quieter than Trailer, with
+   an arrow to say it opens somewhere else. */
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn-ghost {
+  background: transparent;
+}
+.btn-out::after {
+  content: '↗' / '';
+  margin-left: 4px;
+  font-size: 0.9em;
+  opacity: 0.7;
 }
 
 a.link {
@@ -775,6 +779,29 @@ a.link:hover {
   display: grid;
   gap: 22px;
 }
+/* On a wide screen the sections sit in two columns rather than one narrow
+   strip with half the page empty. Columns, not a grid, so a tall section does
+   not leave a gap beside the short ones. */
+@media (min-width: 1000px) {
+  .form {
+    display: block;
+    max-width: none;
+    columns: 2;
+    column-gap: 22px;
+  }
+  .form fieldset {
+    break-inside: avoid;
+    margin-bottom: 22px;
+  }
+}
+.form fieldset .row {
+  margin-bottom: 16px;
+}
+.form fieldset .row.save-row {
+  margin: 4px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
 fieldset {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -812,6 +839,7 @@ legend {
   width: 80px;
 }
 .suffix em {
+  min-width: 2.2em;
   font-style: normal;
   color: var(--muted);
   font-size: 13px;
@@ -910,19 +938,6 @@ legend {
   .art {
     width: 60px;
     height: 60px;
-  }
-  #out-list .card,
-  #upcoming-list .card {
-    grid-template-columns: 92px 1fr;
-  }
-  #out-list .art,
-  #upcoming-list .art {
-    width: 92px;
-    height: 92px;
-  }
-  #out-list .art-poster,
-  #upcoming-list .art-poster {
-    height: 138px;
   }
   .field.narrow {
     grid-template-columns: 1fr;
@@ -1228,6 +1243,545 @@ legend {
   .stream-row .card-actions {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+}
+
+
+/* ------------------------------------------------------------- utilities */
+
+/* Read out by screen readers, not shown. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.btn-scan {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A line that needs reading before the list: an old chart, unsaved settings. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin: 0 0 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+.empty-actions {
+  margin-top: 14px;
+}
+
+/* ------------------------------------------------ compact feed rows */
+
+/* Out now and Coming soon are lists to scan, so each release is one short row:
+   a small poster, the title with its artist or episode beside it, and the tags
+   and date underneath. Roughly three times as many fit on a screen as the old
+   cards did. */
+#out-list,
+#upcoming-list {
+  gap: 4px;
+}
+#out-list .day-head,
+#upcoming-list .day-head {
+  margin-top: 14px;
+}
+#out-list .day-head:first-child,
+#upcoming-list .day-head:first-child {
+  margin-top: 0;
+}
+.card.feed-row {
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.feed-row .art {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+}
+.feed-row .art-poster {
+  height: 60px;
+}
+.feed-row .art-fallback {
+  font-size: 16px;
+}
+.feed-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+.feed-line .card-title {
+  margin: 0;
+  min-width: 0;
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The subtitle gives way first when the line is tight. */
+.feed-line .card-artist {
+  min-width: 0;
+  flex: 0 1000 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-row .card-meta {
+  gap: 6px;
+  margin-top: 3px;
+}
+.feed-row .card-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.feed-row .episode-list {
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
+/* --------------------------------------------------------- poster grid */
+
+/* Trending and Suggestions: posters in a grid, the way Recently added shows
+   them, with the actions as small buttons under each one. */
+.poster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 22px 14px;
+  align-items: start;
+}
+.poster-grid > .day-head,
+.poster-grid > .empty,
+.poster-grid > .grid-slot {
+  grid-column: 1 / -1;
+}
+.poster-grid > .day-head {
+  margin-top: 8px;
+}
+.poster-grid > .day-head:first-child {
+  margin-top: 0;
+}
+.grid-slot:empty {
+  display: none;
+}
+.grid-slot .player {
+  margin-top: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.poster-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.poster-art {
+  position: relative;
+}
+.poster-art .art {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+}
+.poster-art.is-square .art {
+  aspect-ratio: 1;
+}
+.poster-art .art-fallback {
+  font-size: 40px;
+}
+.rank {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-width: 26px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.poster-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.poster-meta {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.poster-why {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.poster-body .card-blurb {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  font-size: 12.5px;
+}
+.poster-body .card-meta:empty {
+  display: none;
+}
+.poster-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+/* ------------------------------------------------------- A to Z jump bar */
+
+/* Only the letters the list holds. It sticks to the top while the list scrolls
+   on a wide screen; on a phone it is one row that scrolls sideways. */
+.jumpbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 0;
+  margin-bottom: 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.chart-card .jumpbar {
+  background: var(--surface);
+}
+.jump {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.jump:hover,
+.jump:focus-visible {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+[data-letter] {
+  scroll-margin-top: 56px;
+}
+.show-more {
+  margin: 10px 0 0;
+}
+
+/* A poster in a row of names keeps its shape rather than being cut to a circle. */
+.artist-row .art-poster {
+  width: 40px;
+  height: 60px;
+  border-radius: 4px;
+  justify-self: center;
+}
+
+/* ---------------------------------------------------------- recent plays */
+
+.play-list {
+  display: grid;
+  margin-top: 6px;
+}
+.play-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+.play-row:last-child {
+  border-bottom: 0;
+}
+.play-row .art {
+  width: 28px;
+  height: 42px;
+  border-radius: 4px;
+}
+.play-row .art-fallback {
+  font-size: 13px;
+}
+.play-main {
+  min-width: 0;
+}
+.play-title {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.play-row .artist-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.play-when {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- lyrics */
+
+.ly-overview {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+}
+
+/* -------------------------------------------- bottom navigation, phones */
+
+.bottomnav {
+  display: none;
+}
+.bnav-tab {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.bnav-tab.is-active {
+  color: var(--accent);
+}
+.bnav-label {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bnav-icon {
+  position: relative;
+  display: inline-flex;
+}
+.bnav-icon .icon {
+  width: 24px;
+  height: 24px;
+}
+.bnav-icon .pill {
+  position: absolute;
+  top: -6px;
+  left: 15px;
+  min-width: 18px;
+  margin: 0;
+  padding: 0 5px;
+  font-size: 10.5px;
+  line-height: 16px;
+  text-align: center;
+  background: var(--surface-3);
+  color: var(--text);
+}
+.bnav-tab.is-active .pill {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.more-list {
+  display: grid;
+  gap: 8px;
+}
+.more-item {
+  font: inherit;
+  display: grid;
+  gap: 2px;
+  min-height: 56px;
+  padding: 14px 16px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.more-item:hover {
+  border-color: var(--line-strong);
+}
+.more-title {
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  /* The seven tabs do not fit across a phone, so the bottom bar takes over. */
+  .tabs {
+    display: none;
+  }
+  .bottomnav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    padding: 4px calc(4px + env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom))
+      calc(4px + env(safe-area-inset-left));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+  main {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  /* One line of header: the mark, the name, and the check button as an icon. */
+  .topbar {
+    flex-wrap: nowrap;
+    gap: 10px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-bottom: 10px;
+  }
+  .brand {
+    gap: 10px;
+    min-width: 0;
+  }
+  .disc {
+    width: 32px;
+    height: 32px;
+  }
+  .topbar h1 {
+    font-size: 17px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tagline {
+    display: none;
+  }
+  .topbar-actions {
+    flex: none;
+  }
+  .btn-scan {
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+  .btn-scan .icon {
+    width: 20px;
+    height: 20px;
+  }
+  .btn-scan .btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  #stop-btn {
+    min-height: 44px;
+  }
+
+  /* Recently added is one row that scrolls sideways, not a wall of posters. */
+  .added-strip {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: 108px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 6px;
+  }
+  .added-item {
+    scroll-snap-align: start;
+  }
+
+  .jumpbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .jump {
+    flex: none;
+    min-width: 36px;
+    height: 36px;
+  }
+
+  .poster-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 20px 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .card.feed-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .feed-row .card-actions {
+    justify-content: flex-start;
+  }
+  .feed-line {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  .jump {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 

@@ -20,6 +20,11 @@ import {
   sydneyTime,
   formatWhen,
   relativeWhen,
+  emptyReason,
+  jumpLetter,
+  jumpLetters,
+  daysSince,
+  badgeLabel,
 } from '../public/feed.js';
 
 const NOW = new Date('2026-09-19T12:00:00+10:00');
@@ -694,4 +699,134 @@ test('a month-only record gets its own heading, apart from one really out that d
   assert.equal(groups.length, 2);
   assert.equal(dayHeading(groups[1]!.date, NOW, groups[1]!.precision), 'Sometime in November 2026');
   assert.equal(dayHeading(groups[0]!.date, NOW, groups[0]!.precision), 'Monday 30 November');
+});
+
+/* ----------------------------------------------------------- empty states */
+
+test('an empty Out now caused only by Hide what I have says you are caught up', () => {
+  const rows = [item({ in_library: 1 }), item({ in_library: 1 }), item({ in_library: 1 })];
+  const r = emptyReason(rows, baseFilter({ held: false, horizon: 0 }), 'out', NOW);
+  assert.equal(r.reason, 'held');
+  assert.equal(r.title, "You're all caught up");
+  assert.equal(r.hint, 'All 3 recent releases are already on your server.');
+  assert.equal(r.action.kind, 'show-held');
+  assert.equal(r.action.label, 'Show them');
+});
+
+test('one held release is worded in the singular', () => {
+  const r = emptyReason([item({ in_library: 1 })], baseFilter({ held: false }), 'out', NOW);
+  assert.equal(r.hint, 'The only recent release is already on your server.');
+});
+
+test('a search whose only matches are held names the search', () => {
+  const rows = [item({ title: 'Blue', in_library: 1 }), item({ title: 'Red' })];
+  const r = emptyReason(rows, baseFilter({ q: 'blue', held: false }), 'out', NOW);
+  assert.equal(r.reason, 'held');
+  assert.equal(r.title, 'Already on your server');
+  assert.match(r.hint, /match for "blue"/);
+});
+
+test('a search that matches nothing anywhere offers to clear it', () => {
+  const rows = [item({ title: 'Red' })];
+  const r = emptyReason(rows, baseFilter({ q: 'zzz', held: false }), 'out', NOW);
+  assert.equal(r.reason, 'search');
+  assert.equal(r.title, 'Nothing matches "zzz"');
+  assert.equal(r.action.kind, 'clear-search');
+});
+
+test('every type switched off is named before anything else', () => {
+  const r = emptyReason([item()], baseFilter({ types: new Set() }), 'out', NOW);
+  assert.equal(r.reason, 'no-types');
+  assert.equal(r.action.kind, 'types-on');
+});
+
+test('some types switched off says where the rows are', () => {
+  const r = emptyReason([item({ kind: 'ep' })], baseFilter({ types: new Set(['album']) }), 'out', NOW);
+  assert.equal(r.reason, 'types');
+  assert.match(r.hint, /EPs/);
+});
+
+test('cinema-only films hidden by default are explained', () => {
+  const rows = [item({ kind: 'movie', date_kind: 'cinema' })];
+  const r = emptyReason(rows, baseFilter(), 'out', NOW);
+  assert.equal(r.reason, 'cinema');
+  assert.equal(r.hint, '1 film is showing in cinemas but not out at home yet.');
+  assert.equal(r.action.kind, 'show-cinema');
+});
+
+test('an empty week ahead offers the next window that has something in it', () => {
+  const rows = [item({ date: '2026-10-10' })];
+  const r = emptyReason(rows, baseFilter({ sort: 'soonest', horizon: 7 }), 'upcoming', NOW);
+  assert.equal(r.reason, 'window');
+  assert.equal(r.title, 'Nothing in the next 7 days');
+  assert.equal(r.hint, '1 item is further ahead.');
+  assert.equal(r.action.kind, 'widen');
+  // Three weeks out: two weeks is not enough, a month is.
+  assert.equal(r.action.horizon, 30);
+  assert.equal(r.action.label, 'Show the next month');
+});
+
+test('a search is named even when other filters also hide its matches', () => {
+  const rows = [item({ title: 'Red', kind: 'ep' })];
+  const r = emptyReason(rows, baseFilter({ q: 'red', types: new Set(['album']) }), 'out', NOW);
+  assert.equal(r.reason, 'types');
+  const both = emptyReason(rows, baseFilter({ q: 'blue', types: new Set(['album']) }), 'out', NOW);
+  assert.equal(both.reason, 'search');
+});
+
+test('with no single cause and no search the message falls back to the filters', () => {
+  const rows = [item({ kind: 'ep', in_library: 1 })];
+  const r = emptyReason(rows, baseFilter({ held: false, types: new Set(['album']) }), 'out', NOW);
+  assert.equal(r.reason, 'filters');
+  assert.equal(r.action.kind, 'clear');
+});
+
+/* ------------------------------------------------------------ jump bar */
+
+test('jump letters fold accents and file digits and symbols under #', () => {
+  assert.equal(jumpLetter('Émilie'), 'E');
+  assert.equal(jumpLetter('abba'), 'A');
+  assert.equal(jumpLetter('3 Doors Down'), '#');
+  assert.equal(jumpLetter('‐blink'), '#');
+  assert.equal(jumpLetter(''), '#');
+  assert.equal(jumpLetter(null), '#');
+});
+
+test('the jump bar offers only letters present, each at its first row', () => {
+  assert.deepEqual(jumpLetters(['3 Doors Down', 'Adkins, Trace', 'anderson', 'Barrett, Gabby']), [
+    { letter: '#', index: 0 },
+    { letter: 'A', index: 1 },
+    { letter: 'B', index: 3 },
+  ]);
+});
+
+/* ----------------------------------------------------------- staleness */
+
+test('daysSince counts whole Sydney days and copes with missing dates', () => {
+  assert.equal(daysSince('2026-09-01', NOW), 18);
+  assert.equal(daysSince('2026-09-19T01:00:00Z', NOW), 0);
+  assert.equal(daysSince('2026-09-25', NOW), 0);
+  assert.equal(daysSince(null, NOW), null);
+  assert.equal(daysSince('soon', NOW), null);
+});
+
+/* -------------------------------------------------------------- badges */
+
+test('the Coming soon badge label names its window', () => {
+  const f = baseFilter({ sort: 'soonest', horizon: 7, held: true });
+  assert.equal(badgeLabel(23, 'upcoming', f, { held: true }), '23 in the next 7 days');
+  assert.equal(badgeLabel(23, 'upcoming', { ...f, horizon: 0 }, { held: true }), '23 dated ahead');
+  assert.equal(
+    badgeLabel(4, 'upcoming', { ...f, q: 'x' }, { held: true }),
+    '4 in the next 7 days, with your filters',
+  );
+});
+
+test('the Out now badge label says what is still to get', () => {
+  const f = baseFilter({ horizon: 0, held: false });
+  assert.equal(badgeLabel(5, 'out', f, { held: false }), '5 out recently and not on your server');
+  assert.equal(
+    badgeLabel(9, 'out', { ...f, held: true }, { held: false }),
+    '9 out recently, with your filters',
+  );
 });

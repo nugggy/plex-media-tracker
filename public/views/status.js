@@ -9,9 +9,10 @@ import { api, post } from '../lib/api.js';
 import { state } from '../lib/state.js';
 import { loadArtists } from './artists.js';
 import { loadLibrary } from './library.js';
-import { loadReleases } from './releases.js';
+import { loadReleases, prefetchFeed, updateFeedBadges } from './releases.js';
 import { loadSuggestions } from './suggestions.js';
 import { loadWatchlist } from './watchlist.js';
+import { setBadge } from '../components.js';
 
 /**
  * Each tab refreshes only what it shows. The full Check for updates is still
@@ -79,14 +80,17 @@ export async function refreshState() {
     const { configured, counts, progress, scans, machine_id, restart_needed } = await api('/api/state');
     state.machineId = machine_id ?? null;
 
-    $('#count-out').textContent = counts.out;
-    $('#count-upcoming').textContent = counts.upcoming;
-    $('#count-artists').textContent = counts.artists;
-    $('#count-watchlist').textContent = counts.watchlist ?? 0;
+    updateFeedBadges(counts);
+    // Artists counts the active ones, which is what the Artists list opens on.
+    const activeArtists = counts.artists_active ?? counts.artists ?? 0;
+    setBadge('artists', activeArtists, `${activeArtists} active ${activeArtists === 1 ? 'artist' : 'artists'}, not muted`);
+    const listed = counts.watchlist ?? 0;
+    setBadge('watchlist', listed, `${listed} on your Plex watchlist`);
 
     const running = progress.running;
     $('#scan-btn').disabled = running || !configured;
-    $('#scan-btn').textContent = running ? 'Checking…' : 'Check for updates';
+    // Only the label changes: the button also holds an icon, shown alone on a phone.
+    $('#scan-label').textContent = running ? 'Checking…' : 'Check for updates';
     for (const btn of document.querySelectorAll('[data-refresh]')) {
       btn.disabled = running || !configured;
       btn.textContent = running ? 'Working…' : REFRESH_LABELS[btn.dataset.refresh] ?? 'Refresh';
@@ -137,6 +141,8 @@ export async function refreshState() {
 
     if (!running && state.wasRunning) {
       if (state.tab === 'out' || state.tab === 'upcoming') loadReleases();
+      // The badges count from the feeds, so both are read again after a sync.
+      for (const view of ['out', 'upcoming']) if (state.tab !== view) prefetchFeed(view);
       if (state.tab === 'artists') loadArtists();
       if (state.tab === 'watchlist') loadWatchlist();
       if (state.tab === 'suggestions') loadSuggestions();

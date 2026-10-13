@@ -13,9 +13,9 @@ import { loadDash, stopNowPlaying } from './views/dash.js';
 import { loadFriends } from './views/friends.js';
 import { loadLibrary } from './views/library.js';
 import { loadLyrics, lyricsPoll } from './views/lyrics.js';
-import { buildFilterBar, loadReleases } from './views/releases.js';
+import { buildFilterBar, loadReleases, prefetchFeed } from './views/releases.js';
 import { renderSearch } from './views/search.js';
-import { loadSettings } from './views/settings.js';
+import { loadSettings, warnIfUnsaved } from './views/settings.js';
 import { refreshState, wireRefreshButtons } from './views/status.js';
 import { loadSuggestions, suggestionsPoll } from './views/suggestions.js';
 import { loadTrending, trendingPoll } from './views/trending.js';
@@ -46,13 +46,20 @@ const lastView = Object.fromEntries(
   Object.entries(TAB_GROUPS).map(([group, views]) => [group, views[0]]),
 );
 
+/** The tabs the phone's More page leads to, so More stays lit while one is open. */
+const UNDER_MORE = new Set(['more', 'discover', 'library', 'settings']);
+
 function showTab(name) {
   const view = TAB_GROUPS[name] ? lastView[name] : name;
   const group = groupOf[view];
   if (group) lastView[group] = view;
   const top = group ?? view;
+  if (state.tab === 'settings' && view !== 'settings') warnIfUnsaved();
   state.tab = view;
   $$('.tab').forEach((t) => markTab(t, t.dataset.tab === top));
+  $$('.bnav-tab').forEach((t) =>
+    markTab(t, t.dataset.tab === top || (t.dataset.tab === 'more' && UNDER_MORE.has(top))),
+  );
   $$('.panel').forEach((p) => {
     p.hidden = p.id !== `panel-${top}`;
   });
@@ -122,9 +129,25 @@ function wireTabKeys(list, selector, nameOf) {
   });
 }
 
-$$('.tab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
+$$('.tab, .bnav-tab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
 $$('.subtab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.sub)));
 wireTabKeys($('.tabs'), '.tab', (t) => t.dataset.tab);
+wireTabKeys($('.bottomnav'), '.bnav-tab', (t) => t.dataset.tab);
+
+// The phone's More page lists the three tabs that do not fit along the bottom.
+$$('.more-item').forEach((item) =>
+  item.addEventListener('click', () => {
+    showTab(item.dataset.go);
+    $(`#panel-${item.dataset.go}`)?.querySelector('[role="tab"][tabindex="0"], button, input, select')?.focus();
+  }),
+);
+
+// More exists only at phone width. Widening the window while it is open
+// would leave a page no top tab leads to, so it goes back to Out now.
+const phoneWidth = window.matchMedia('(max-width: 700px)');
+phoneWidth.addEventListener('change', () => {
+  if (!phoneWidth.matches && state.tab === 'more') showTab('out');
+});
 $$('.subtabs').forEach((list) => wireTabKeys(list, '.subtab', (t) => t.dataset.sub));
 
 /* ------------------------------------------------------------------ boot */
@@ -134,3 +157,6 @@ buildFilterBar('out');
 buildFilterBar('upcoming');
 showTab('out');
 refreshState();
+// Read Coming soon now as well, so its badge counts what the tab will show
+// before it is ever opened.
+prefetchFeed('upcoming');

@@ -255,6 +255,16 @@ export async function addFilmOrShow(ratingKey: string): Promise<void> {
  * nothing is ever claimed to be owned.
  */
 export function trackArtist(mbid: string, name: string): void {
+  // Already in the Plex library under this ID: following them means making
+  // sure that row is not muted, not adding a second row that would list them
+  // twice on the Artists tab.
+  const inPlex = store.plexArtistForMbid(mbid);
+  if (inPlex) {
+    store.setArtistMuted(inPlex, false);
+    // Tidies a hand-followed row left from before the library had them.
+    store.mergeManualArtists();
+    return;
+  }
   const key = `manual:${mbid}`;
   const existing = db.prepare('SELECT plex_key FROM artists WHERE plex_key = ?').get(key);
   if (existing) {

@@ -254,6 +254,13 @@ runOnce('2026-10-drop-singles', () => {
   db.exec("DELETE FROM settings WHERE key = 'include_single'");
 });
 
+// Artists followed by hand that have since turned up in the Plex library were
+// listed twice, once under each key. Folded together once here; the scan and
+// the hand-set MusicBrainz ID keep it from happening again.
+runOnce('2026-10-merge-manual-artists-into-plex', () => {
+  mergeManualArtistRows();
+});
+
 /* ---------------------------------------------------------------- settings */
 
 const DEFAULTS: Record<string, string> = {
@@ -379,6 +386,67 @@ export function markAbsentArtists(seenKeys: string[]): number {
     n: number;
   };
   return row.n;
+}
+
+/**
+ * The Plex library artist a hand-followed artist with this MusicBrainz ID now
+ * belongs to, if any. Only a present one counts: an artist that has left the
+ * library cannot stand in for a follow, since absent artists drop out of the
+ * feeds. When Plex lists the same artist twice, the unmuted one with the most
+ * albums wins, so the choice is stable from one run to the next.
+ */
+export function plexArtistForMbid(mbid: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT plex_key FROM artists
+       WHERE mbid = ? AND present = 1 AND plex_key NOT LIKE 'manual:%'
+       ORDER BY muted ASC, album_count DESC, plex_key ASC LIMIT 1`,
+    )
+    .get(mbid) as { plex_key: string } | undefined;
+  return row?.plex_key ?? null;
+}
+
+/** The work of mergeManualArtists, without a transaction of its own. */
+function mergeManualArtistRows(): number {
+  const manual = db
+    .prepare("SELECT plex_key, mbid, muted FROM artists WHERE plex_key LIKE 'manual:%' AND mbid IS NOT NULL")
+    .all() as { plex_key: string; mbid: string; muted: number }[];
+  let merged = 0;
+  for (const m of manual) {
+    const target = plexArtistForMbid(m.mbid);
+    if (!target) continue;
+    // A release group is one row keyed by its MusicBrainz ID, so moving the
+    // rows across cannot duplicate one, and each keeps its own dismissed flag.
+    db.prepare('UPDATE releases SET plex_key = ? WHERE plex_key = ?').run(target, m.plex_key);
+    // The Plex row's mute stands, except that a hand-followed row which is
+    // still unmuted is the user saying "I want this artist", which outranks a
+    // mute on the library copy. A muted manual row adds nothing to a mute the
+    // Plex row may or may not have, so it is simply dropped.
+    if (m.muted === 0) db.prepare('UPDATE artists SET muted = 0 WHERE plex_key = ?').run(target);
+    db.prepare('DELETE FROM artists WHERE plex_key = ?').run(m.plex_key);
+    merged += 1;
+  }
+  // Moved releases now sit under an artist with real albums, so some are held.
+  if (merged > 0) refreshOwnedFlags();
+  return merged;
+}
+
+/**
+ * Folds every hand-followed artist into its Plex library twin, once Plex has
+ * an artist with the same MusicBrainz ID (found by a scan or set by hand).
+ * Without this, following an artist and later adding them to Plex left two
+ * rows and the Artists list showed them twice. Returns how many were merged.
+ */
+export function mergeManualArtists(): number {
+  db.exec('BEGIN');
+  try {
+    const merged = mergeManualArtistRows();
+    db.exec('COMMIT');
+    return merged;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 export function setArtistMbid(plexKey: string, mbid: string | null, status: MbStatus): void {
@@ -608,6 +676,8 @@ export interface Counts {
   out: number;
   upcoming: number;
   artists: number;
+  /** Every artist in the list, muted ones included. */
+  artists_present: number;
   unresolved: number;
 }
 
@@ -634,6 +704,7 @@ export function counts(recentDays: number): Counts {
       now,
     ),
     artists: q('SELECT COUNT(*) AS n FROM artists WHERE present = 1 AND muted = 0'),
+    artists_present: q('SELECT COUNT(*) AS n FROM artists WHERE present = 1'),
     unresolved: q(
       `SELECT COUNT(*) AS n FROM artists
        WHERE present = 1 AND muted = 0 AND mb_status IN ('ambiguous', 'not_found', 'error')`,

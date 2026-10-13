@@ -3,20 +3,35 @@
  */
 
 import { cmp, fold, plural, relativeDays } from '../feed.js';
-import { $, banner, el, safeHref } from '../lib/dom.js';
+import { $, banner, el } from '../lib/dom.js';
 import { api, post } from '../lib/api.js';
-import { state } from '../lib/state.js';
-import { artwork, releaseArtwork } from '../components.js';
+import { loadPref, savePref, state } from '../lib/state.js';
+import { artwork, drawLongList, linkButton, releaseArtwork } from '../components.js';
 import { refreshState } from './status.js';
 
 /* --------------------------------------------------------------- artists */
 
 const NEEDS_ATTENTION = new Set(['ambiguous', 'not_found', 'error']);
+
+/**
+ * The key the Name sort and the A to Z bar both use: the name as shown, less a
+ * leading "The". Plex's own sort names are filed by surname for some artists
+ * and by first name for others ("Adkins, Trace" beside "Abby Anderson"), so
+ * following them made the list look shuffled. cmp ignores case, so
+ * "blink-182" files among the Bs rather than after every capital.
+ */
+const sortKey = (a) => (a.name || a.sort_name || '').replace(/^the\s+/i, '');
 const ARTIST_SORTS = {
-  name: (a, b) => cmp(a.sort_name, b.sort_name),
-  albums: (a, b) => b.album_count - a.album_count || cmp(a.sort_name, b.sort_name),
+  name: (a, b) => cmp(sortKey(a), sortKey(b)),
+  albums: (a, b) => b.album_count - a.album_count || cmp(sortKey(a), sortKey(b)),
   checked: (a, b) => cmp(a.last_checked_at ?? '', b.last_checked_at ?? ''),
 };
+
+const STATUSES = ['active', 'all', 'attention', 'matched', 'muted'];
+/** The list opens on the artists being watched, the same set the badge counts. */
+const DEFAULT_STATUS = 'active';
+state.artistFilters.status = loadPref('artist-status', DEFAULT_STATUS, STATUSES);
+$('#artist-status').value = state.artistFilters.status;
 
 export async function loadArtists() {
   try {
@@ -34,6 +49,7 @@ export async function loadArtists() {
  */
 function matchesStatus(a, status) {
   if (status === 'all') return true;
+  if (status === 'active') return !a.muted;
   if (status === 'muted') return a.muted === 1;
   if (status === 'attention') return NEEDS_ATTENTION.has(a.mb_status);
   return a.mb_status === 'resolved' || a.mb_status === 'manual';
@@ -45,22 +61,18 @@ function renderArtists() {
   const rows = state.artists
     .filter((a) => !q || fold(a.name).includes(q))
     .filter((a) => matchesStatus(a, f.status))
-    .sort((a, b) => {
-      if (f.sort === 'name' && f.status === 'all') {
-        const pa = NEEDS_ATTENTION.has(a.mb_status) ? 0 : 1;
-        const pb = NEEDS_ATTENTION.has(b.mb_status) ? 0 : 1;
-        if (pa !== pb) return pa - pb;
-      }
-      return ARTIST_SORTS[f.sort](a, b);
-    });
+    .sort(ARTIST_SORTS[f.sort]);
 
-  const active = f.q !== '' || f.status !== 'all' || f.sort !== 'name';
+  const active = f.q !== '' || f.status !== DEFAULT_STATUS || f.sort !== 'name';
+  const total = plural(state.artists.length, 'artist');
   $('#artist-summary').textContent =
     state.artists.length === 0
       ? ''
-      : active
-        ? `Showing ${rows.length} of ${plural(state.artists.length, 'artist')}`
-        : plural(state.artists.length, 'artist');
+      : f.status === 'active' && f.q === ''
+        ? `${rows.length} active, of ${total} in all`
+        : rows.length === state.artists.length
+          ? total
+          : `Showing ${rows.length} of ${total}`;
   $('#artist-clear').hidden = !active;
 
   const list = $('#artist-list');
@@ -77,7 +89,16 @@ function renderArtists() {
     );
     return;
   }
-  for (const a of rows) list.append(artistRow(a));
+  drawLongList({
+    list,
+    rows,
+    draw: artistRow,
+    name: 'artists',
+    redraw: renderArtists,
+    noun: 'artist',
+    // The bar only makes sense while the list runs A to Z.
+    keyOf: f.sort === 'name' ? sortKey : null,
+  });
 }
 
 const STATUS_LABEL = {
@@ -183,16 +204,7 @@ function fixPanel(a) {
       el(
         'span',
         { class: 'card-actions' },
-        el(
-          'a',
-          {
-            class: 'link',
-            href: safeHref(`https://musicbrainz.org/artist/${encodeURIComponent(c.id)}`),
-            target: '_blank',
-            rel: 'noreferrer',
-          },
-          'view',
-        ),
+        linkButton(`https://musicbrainz.org/artist/${encodeURIComponent(c.id)}`, 'View'),
         el('button', { class: 'btn btn-tiny', onclick: () => save(c.id) }, 'Use this one'),
       ),
     ),
@@ -226,6 +238,8 @@ $('#artist-filter').addEventListener('input', (e) => {
 
 $('#artist-status').addEventListener('change', (e) => {
   state.artistFilters.status = e.target.value;
+  savePref('artist-status', e.target.value);
+  state.limits.artists = 100;
   renderArtists();
 });
 
@@ -235,9 +249,10 @@ $('#artist-sort').addEventListener('change', (e) => {
 });
 
 $('#artist-clear').addEventListener('click', () => {
-  state.artistFilters = { q: '', status: 'all', sort: 'name' };
+  state.artistFilters = { q: '', status: DEFAULT_STATUS, sort: 'name' };
+  savePref('artist-status', DEFAULT_STATUS);
   $('#artist-filter').value = '';
-  $('#artist-status').value = 'all';
+  $('#artist-status').value = DEFAULT_STATUS;
   $('#artist-sort').value = 'name';
   renderArtists();
 });

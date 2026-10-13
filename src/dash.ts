@@ -306,10 +306,79 @@ export async function libraryStats(): Promise<LibraryStat[]> {
           });
           counts.push({ label, plays: data.MediaContainer?.totalSize ?? data.MediaContainer?.size ?? 0 });
         }
+        // The chosen music library's track count is kept, so the Lyrics tab
+        // can say "of how many" without asking Plex itself.
+        if (type === 'artist' && String(s.key ?? '') === store.getSetting('plex_section')) {
+          const tracks = counts.find((c) => c.label === 'tracks');
+          if (tracks) rememberTrackCount(tracks.plays);
+        }
         return { key: String(s.key ?? ''), title: s.title ?? 'Library', type, counts };
       }),
     );
   });
+}
+
+/* ------------------------------------------------------- track count */
+
+/**
+ * How many tracks the chosen music library holds, as last read. Kept in
+ * settings rather than asked for each time, because the Lyrics summary must
+ * answer at once, and on a phone away from home even one Plex call can be a
+ * slow trip through the relay.
+ */
+const TRACK_COUNT = 'music_track_count';
+const TRACK_COUNT_AT = 'music_track_count_at';
+const TRACK_COUNT_SECTION = 'music_track_count_section';
+/** A day old is old enough to read again; a library does not grow by the hour. */
+const TRACK_COUNT_MAX_AGE_MS = 86_400_000;
+
+export function rememberTrackCount(tracks: number): void {
+  if (!Number.isFinite(tracks) || tracks < 0) return;
+  store.setSetting(TRACK_COUNT, String(Math.round(tracks)));
+  store.setSetting(TRACK_COUNT_AT, new Date().toISOString());
+  store.setSetting(TRACK_COUNT_SECTION, store.getSetting('plex_section'));
+}
+
+/**
+ * The last count read, or null when there is none for the library chosen now.
+ * A count taken from a different library is no answer at all, so a change of
+ * music library in Settings drops it until the next read.
+ */
+export function cachedTrackCount(): { tracks: number | null; fresh: boolean } {
+  const raw = store.getSetting(TRACK_COUNT);
+  const sameSection = store.getSetting(TRACK_COUNT_SECTION) === store.getSetting('plex_section');
+  if (raw === '' || !sameSection) return { tracks: null, fresh: false };
+  const at = Date.parse(store.getSetting(TRACK_COUNT_AT));
+  const age = Date.now() - at;
+  return {
+    tracks: Number(raw),
+    fresh: !Number.isNaN(at) && age >= 0 && age < TRACK_COUNT_MAX_AGE_MS,
+  };
+}
+
+let countingTracks = false;
+
+/**
+ * Reads the track count with one request that asks Plex for the total and no
+ * rows, so it is quick however big the library is. Never two at once.
+ */
+export async function refreshTrackCount(): Promise<void> {
+  const section = store.getSetting('plex_section');
+  if (countingTracks || !section) return;
+  countingTracks = true;
+  try {
+    const data = await withPlex((url) =>
+      plexGet(url, token(), `/library/sections/${section}/all`, {
+        type: '10',
+        'X-Plex-Container-Start': '0',
+        'X-Plex-Container-Size': '0',
+      }),
+    );
+    const n = data.MediaContainer?.totalSize ?? data.MediaContainer?.size;
+    if (typeof n === 'number') rememberTrackCount(n);
+  } finally {
+    countingTracks = false;
+  }
 }
 
 export async function recentlyAdded(limit = 24): Promise<Added[]> {

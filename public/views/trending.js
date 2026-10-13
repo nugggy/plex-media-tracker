@@ -2,16 +2,17 @@
  * Discover, Trending.
  */
 
-import { fold, plural, formatDate, relativeDays, filterCatalogue } from '../feed.js';
-import { $, banner, el, safeHref } from '../lib/dom.js';
+import { fold, plural, formatDate, relativeDays, filterCatalogue, daysSince } from '../feed.js';
+import { $, banner, el } from '../lib/dom.js';
 import { api, poller, post } from '../lib/api.js';
 import { state } from '../lib/state.js';
 import {
   addToWatchlistButton,
   artwork,
   confirmingButton,
+  gridPlayer,
+  linkButton,
   releaseArtwork,
-  togglePlayer,
   wireChips,
 } from '../components.js';
 
@@ -23,10 +24,58 @@ export async function loadTrending() {
     state.trending = r.items;
     state.trendingBuiltAt = r.built_at;
     state.trendingHasKey = r.has_tmdb_key;
+    // A server that predates these fields still gets a notice: a chart over a
+    // week old is stale by the same measure the server uses.
+    state.trendingStale = r.stale ?? (chartAge() ?? 0) >= 7;
+    state.trendingBuilding = Boolean(r.building);
+    // The server can start a build by itself, on start-up or when this tab is
+    // opened, so a build already under way is followed here too.
+    if (state.trendingBuilding) trendingPoll.start();
     renderTrending();
   } catch (err) {
     banner(err.message);
   }
+}
+
+/** Days since the oldest chart was built, or null when none has been. */
+function chartAge() {
+  const ages = Object.values(state.trendingBuiltAt ?? {})
+    .map((d) => daysSince(d))
+    .filter((n) => n !== null);
+  return ages.length ? Math.max(...ages) : null;
+}
+
+/**
+ * The notice above the charts. The small "built 18 days ago" beside each
+ * heading was too easy to miss, so an old chart, or one being rebuilt, says so
+ * in a line of its own with the button to fix it.
+ */
+function renderTrendingNotice() {
+  const notice = $('#tr-notice');
+  if (state.trendingBuilding) {
+    notice.replaceChildren(el('span', {}, 'Rebuilding the charts…'));
+    notice.hidden = false;
+    return;
+  }
+  if (!state.trendingStale || !state.trending.length) {
+    notice.hidden = true;
+    notice.replaceChildren();
+    return;
+  }
+  const age = chartAge();
+  notice.replaceChildren(
+    el(
+      'span',
+      {},
+      age ? `These charts are ${plural(age, 'day')} old.` : 'These charts are out of date.',
+    ),
+    el(
+      'button',
+      { type: 'button', class: 'btn btn-tiny', onclick: (e) => startTrendingBuild(e.currentTarget) },
+      'Rebuild',
+    ),
+  );
+  notice.hidden = false;
 }
 
 /**
@@ -58,6 +107,7 @@ function renderTrending() {
     ? `${rows.length} of ${plural(state.trending.length, 'item')}`
     : '';
 
+  renderTrendingNotice();
   const list = $('#tr-list');
   releaseArtwork(list);
   list.replaceChildren();
@@ -78,7 +128,7 @@ function renderTrending() {
     return;
   }
 
-  // One run of cards per chart, under its own heading. Without this the
+  // One run of posters per chart, under its own heading. Without this the
   // charts read as one flat list, so a row numbered 1 appears two or three
   // times with nothing saying which chart it belongs to. The fixed order
   // matches the filter chips, not the alphabetical kind order the rows arrive
@@ -95,7 +145,7 @@ const TR_KIND_ORDER = ['movie', 'show', 'album'];
 const TR_KIND_LABEL = { movie: 'Films', show: 'Shows', album: 'Albums' };
 
 /**
- * The heading above one chart's run of cards. Built per kind rather than
+ * The heading above one chart's run of posters. Built per kind rather than
  * once for the whole tab: after a partial rebuild one chart can be a lot
  * older than the others, and labelling a stale chart with today's date is
  * the single worst outcome this feature can produce.
@@ -115,67 +165,77 @@ function trendingHeadingRow(kind, count) {
   );
 }
 
-const TR_TAG = { movie: 'film', show: 'show', album: 'album' };
-
+/**
+ * One chart entry as a poster: the rank over the corner, the title and who or
+ * what it is under it, a status chip, and the actions in a row beneath. The
+ * actions are ordinary buttons and links in reading order, so the keyboard
+ * reaches each one without any hovering.
+ */
 function trendingCard(t) {
-  const card = el('article', { class: 'card' });
+  const card = el('article', { class: 'poster-card' });
+  const isVideo = t.kind === 'movie' || t.kind === 'show';
   // Artwork always goes through the /thumb proxy, the same as every other
   // card, so the page never contacts Apple or TMDB directly.
-  const art = t.thumb
-    ? artwork(`/thumb?url=${encodeURIComponent(t.thumb)}`, t.title)
-    : el('div', { class: 'art art-fallback' }, (t.title || '?').charAt(0).toUpperCase());
+  const art = artwork(t.thumb ? `/thumb?url=${encodeURIComponent(t.thumb)}` : null, t.title, isVideo);
 
   card.append(
-    art,
     el(
       'div',
-      {},
+      { class: `poster-art${isVideo ? '' : ' is-square'}` },
+      art,
       // The rank is the chart position, not the row's position in this list,
       // so it keeps counting from the real chart even when catalogue rows are
       // filtered out and the visible numbers skip.
-      el('p', { class: 'card-title' }, el('span', { class: 'muted' }, `${t.rank}. `), t.title),
-      el('p', { class: 'card-artist' }, t.subtitle || ''),
-      el(
-        'div',
-        { class: 'card-meta' },
-        el('span', { class: 'tag' }, TR_TAG[t.kind] ?? t.kind),
-        t.release_date ? el('span', {}, formatDate(t.release_date)) : null,
-        trendingHeldTag(t),
-      ),
+      el('span', { class: 'rank', 'aria-hidden': 'true' }, String(t.rank)),
     ),
     el(
       'div',
-      { class: 'card-actions' },
+      { class: 'poster-body' },
       el(
-        'button',
-        {
-          class: 'btn btn-tiny',
-          onclick: () =>
-            togglePlayer(
-              {
-                // 'single' here only tells the YouTube lookup to search for
-                // music rather than a trailer.
-                kind: t.kind === 'album' ? 'single' : t.kind,
-                title: t.title,
-                subtitle: t.subtitle,
-              },
-              card,
-            ),
-        },
-        t.kind === 'movie' || t.kind === 'show' ? 'Trailer' : 'Play',
+        'p',
+        { class: 'poster-title', title: t.title },
+        el('span', { class: 'sr-only' }, `Number ${t.rank}: `),
+        t.title,
       ),
-      safeHref(t.link)
-        ? el('a', { class: 'link', href: safeHref(t.link), target: '_blank', rel: 'noreferrer' }, 'Details')
-        : null,
-      trendingAction(t),
-      confirmingButton(
-        'Not for me',
-        'Hide, sure?',
-        async () => {
-          await post('/api/trending/hide', { kind: t.kind, id: t.id, hidden: true });
-          loadTrending();
-        },
-        'Hiding…',
+      el(
+        'p',
+        { class: 'poster-meta' },
+        [t.subtitle, t.release_date ? formatDate(t.release_date) : null].filter(Boolean).join(' · '),
+      ),
+      el('div', { class: 'card-meta' }, trendingHeldTag(t), trackedTag(t)),
+      el(
+        'div',
+        { class: 'poster-actions' },
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'btn btn-tiny',
+            onclick: () =>
+              gridPlayer(
+                {
+                  // 'single' here only tells the YouTube lookup to search for
+                  // music rather than a trailer.
+                  kind: t.kind === 'album' ? 'single' : t.kind,
+                  title: t.title,
+                  subtitle: t.subtitle,
+                },
+                card,
+              ),
+          },
+          isVideo ? 'Trailer' : 'Play',
+        ),
+        linkButton(t.link, 'Details'),
+        trendingAction(t),
+        confirmingButton(
+          'Not for me',
+          'Hide, sure?',
+          async () => {
+            await post('/api/trending/hide', { kind: t.kind, id: t.id, hidden: true });
+            loadTrending();
+          },
+          'Hiding…',
+        ),
       ),
     ),
   );
@@ -193,15 +253,21 @@ function trendingHeldTag(t) {
   return checked ? el('span', { class: 'tag not-held' }, 'Not in Plex') : null;
 }
 
+/** On watchlist, or Watched for music, once followed. */
+function trackedTag(t) {
+  if (!t.tracked) return null;
+  const isVideo = t.kind === 'movie' || t.kind === 'show';
+  return el('span', { class: 'tag held' }, isVideo ? '✓ On watchlist' : '✓ Watched');
+}
+
 /**
  * A film or show goes onto the real Plex watchlist. Music has no Plex
  * equivalent, so the action is to watch the artist, as Suggestions does.
  */
 function trendingAction(t) {
   const isVideo = t.kind === 'movie' || t.kind === 'show';
-  if (t.tracked) {
-    return el('span', { class: 'tag held' }, isVideo ? '✓ On watchlist' : '✓ Watched');
-  }
+  // Already followed: the chip says so, and there is nothing left to press.
+  if (t.tracked) return null;
   // With no resolved Plex key or MusicBrainz id there is nothing to add, so
   // offer no button rather than one that would fail.
   if (isVideo && !t.rating_key) return null;
@@ -245,23 +311,38 @@ $('#tr-catalogue').addEventListener('change', (e) => {
 
 wireChips('#tr-chips', 'tr', () => state.trFilters.kinds, renderTrending);
 
-$('#trending-btn').addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
+/**
+ * Starts a rebuild, from the button at the top or the one in the notice. The
+ * server may already be building by itself and answers with an error saying
+ * so. That is not a failure, so the page simply follows the build under way.
+ */
+async function startTrendingBuild(btn) {
   btn.disabled = true;
   try {
     await post('/api/trending/build', {});
-    trendingPoll.start();
   } catch (err) {
-    banner(err.message);
-    btn.disabled = false;
+    if (!/already/i.test(err.message)) {
+      banner(err.message);
+      btn.disabled = false;
+      return;
+    }
   }
-});
+  state.trendingBuilding = true;
+  renderTrendingNotice();
+  trendingPoll.start();
+}
+
+$('#trending-btn').addEventListener('click', (e) => startTrendingBuild(e.currentTarget));
 
 async function pollTrending() {
   try {
     const { running, message } = await api('/api/trending/progress');
     $('#trending-btn').disabled = running;
     $('#trending-btn').textContent = running ? 'Building…' : 'Build trending';
+    if (state.trendingBuilding !== running) {
+      state.trendingBuilding = running;
+      renderTrendingNotice();
+    }
     // banner(), not #tr-summary: loadTrending() below re-renders the summary
     // line straight after this, which would overwrite it in milliseconds and
     // the finished message (in particular which chart failed and is showing
@@ -272,6 +353,8 @@ async function pollTrending() {
   } catch {
     $('#trending-btn').disabled = false;
     $('#trending-btn').textContent = 'Build trending';
+    state.trendingBuilding = false;
+    renderTrendingNotice();
     return false;
   }
 }
