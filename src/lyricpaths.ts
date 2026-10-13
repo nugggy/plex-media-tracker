@@ -26,8 +26,19 @@ export function nasHost(plexUrl: string): string | null {
   return null;
 }
 
+/**
+ * True when any part of the path, split on either kind of slash, is "..". A
+ * path from Plex is trusted to name a song, not to climb out of the share, so
+ * one that tries is refused rather than tidied up. Windows drops trailing dots
+ * and spaces from a folder name, so "... " is treated as ".." too.
+ */
+export function climbsOut(path: string): boolean {
+  return path.split(/[\\/]/).some((part) => /^\s*\.\.[.\s]*$/.test(part));
+}
+
 export function toSharePath(plexFile: string, plexUrl: string): string | null {
   const host = nasHost(plexUrl);
+  if (climbsOut(plexFile)) return null;
   const m = plexFile.match(QNAP_PATH);
   if (!host || !m) return null;
   return `\\\\${host}\\${m[1]}\\${m[2]!.replace(/\//g, '\\')}`;

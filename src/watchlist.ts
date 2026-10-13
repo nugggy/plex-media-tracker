@@ -230,7 +230,12 @@ export interface RefreshResult {
   message: string;
   /** The first thing that went wrong, in plain words, or null for a clean run. */
   problem: string | null;
+  /** True when Stop was pressed and some parts were cut short or skipped. */
+  stopped: boolean;
 }
+
+/** The parts that only mean anything with the watchlist switched on. */
+const WATCHLIST_PARTS: RefreshPart[] = ['watchlist', 'schedules', 'filmdates'];
 
 /**
  * Several parts report at once, so the strip shows every part still running,
@@ -252,11 +257,16 @@ function progressBoard(onProgress?: (m: string) => void) {
  *
  * `force` walks every show's schedule rather than only those that could have
  * changed. A pressed button forces; the start-up sync does not.
+ *
+ * `shouldStop` is asked before each part and inside the long walks. Whatever
+ * finished before Stop was pressed is kept; a part that cannot be kept half
+ * done, such as the list of episodes on the server, is left as it was.
  */
 export async function refreshLibraryState(
   onProgress?: (m: string) => void,
   parts: RefreshPart[] = ALL_PARTS,
   force = false,
+  shouldStop: () => boolean = () => false,
 ): Promise<RefreshResult> {
   const want = new Set(parts);
   const settings = store.getSettings();
@@ -268,8 +278,13 @@ export async function refreshLibraryState(
     episodes: null,
     message: '',
     problem: null,
+    stopped: false,
   };
   let failures = 0;
+  const stopNow = (): boolean => {
+    if (shouldStop()) result.stopped = true;
+    return result.stopped;
+  };
   // Error messages mostly end in a full stop already, and the note adds its own.
   const reason = (err: unknown): string => (err as Error).message.replace(/\.+$/, '');
   const failed = (note: string, err: unknown): void => {
@@ -279,13 +294,18 @@ export async function refreshLibraryState(
   };
   const board = progressBoard(onProgress);
 
-  if (settings.watchlist_enabled !== '1') {
-    for (const part of ['watchlist', 'schedules', 'filmdates'] as const) want.delete(part);
+  const watchlistOn = settings.watchlist_enabled === '1';
+  if (!watchlistOn) {
+    for (const part of WATCHLIST_PARTS) want.delete(part);
   }
+  // What a full refresh means with these settings: every part, less the ones
+  // the watchlist being off rules out.
+  const eligible = ALL_PARTS.filter((p) => watchlistOn || !WATCHLIST_PARTS.includes(p));
 
   await runRefreshPlan(
     {
       async holdings() {
+        if (stopNow()) return;
         const say = board('holdings');
         // In automatic mode, work out where the server is from here before
         // anything talks to it. Manual mode keeps the saved address.
@@ -300,6 +320,7 @@ export async function refreshLibraryState(
           failed((err as Error).message, err);
         }
 
+        if (stopNow()) return say(null);
         say('Re-reading your Plex music library');
         try {
           if (settings.plex_section) {
@@ -321,6 +342,7 @@ export async function refreshLibraryState(
           // Without it, links are simply not offered.
         }
 
+        if (stopNow()) return say(null);
         say('Checking films and shows already on the server');
         try {
           await withPlex(async (url) => {
@@ -336,6 +358,7 @@ export async function refreshLibraryState(
                 settings.plex_token,
                 showSections,
                 say,
+                stopNow,
               );
             }
           });
@@ -345,6 +368,7 @@ export async function refreshLibraryState(
         say(null);
       },
       async watchlist() {
+        if (stopNow()) return;
         const say = board('watchlist');
         try {
           result.watchlist = await syncWatchlist(say);
@@ -359,18 +383,20 @@ export async function refreshLibraryState(
         say(null);
       },
       async schedules() {
+        if (stopNow()) return;
         const say = board('schedules');
         try {
-          result.episodes = await syncEpisodes(say, force);
+          result.episodes = await syncEpisodes(say, force, stopNow);
         } catch (err) {
           failed(`Episode check failed: ${reason(err)}.`, err);
         }
         say(null);
       },
       async filmdates() {
+        if (stopNow()) return;
         const say = board('filmdates');
         try {
-          const films = await syncFilmDates(say);
+          const films = await syncFilmDates(say, stopNow);
           if (!films.skipped) result.message += `${films.message} `;
         } catch (err) {
           failed(`Film date check failed: ${reason(err)}.`, err);
@@ -389,7 +415,8 @@ export async function refreshLibraryState(
   result.heldEpisodes = store.localEpisodeCount();
 
   // Only a clean run of everything lets the next start skip its own sync.
-  if (failures === 0 && ALL_PARTS.every((p) => want.has(p))) {
+  // With the watchlist off, everything is the parts that are left.
+  if (failures === 0 && !result.stopped && eligible.every((p) => want.has(p))) {
     store.setSetting('last_refresh_at', nowIso());
   }
 

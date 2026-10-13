@@ -13,6 +13,7 @@ import {
   DEFAULT_HELD,
   groupByDay,
   dayHeading,
+  formatPartialDate,
   isCatalogue,
   filterCatalogue,
   dropFollowed,
@@ -111,7 +112,7 @@ test('the cinema toggle counts as an active filter', () => {
 
 test('type chips and search compose', () => {
   const rows = [
-    item({ kind: 'single', title: 'A single' }),
+    item({ kind: 'ep', title: 'An EP' }),
     item({ kind: 'album', title: 'An album' }),
     item({ kind: 'movie', title: 'A film', date_kind: 'digital' }),
   ];
@@ -125,6 +126,13 @@ test('type chips and search compose', () => {
 
   const searched = applyFilters(rows, baseFilter({ q: 'album' }), 'out', NOW);
   assert.deepEqual(searched.map((r) => r.title), ['An album']);
+});
+
+test('singles are not a release type, so no chip offers them', () => {
+  assert.deepEqual(ALL_TYPES, ['album', 'ep', 'movie', 'show']);
+  // A single still in an old database is left out rather than shown untyped.
+  const rows = [item({ kind: 'single', title: 'Old single' }), item({ kind: 'ep', title: 'An EP' })];
+  assert.deepEqual(applyFilters(rows, baseFilter(), 'out', NOW).map((r) => r.title), ['An EP']);
 });
 
 /* ------------------------------------------------------------- grouping */
@@ -669,4 +677,21 @@ test('without an instant the day-level wording is unchanged', () => {
   const now = new Date('2026-09-22T09:00:00+10:00');
   assert.equal(relativeWhen('2026-09-22', null, now), relativeDays('2026-09-22', now));
   assert.equal(relativeWhen('2026-09-23', null, now), 'tomorrow');
+});
+
+test('a month-only or year-only date shows just the part MusicBrainz gave', () => {
+  assert.equal(formatPartialDate('2026-11-30', 'month'), 'November 2026');
+  assert.equal(formatPartialDate('2027-12-31', 'year'), '2027');
+  assert.equal(formatPartialDate('2026-11-30', 'day'), null);
+  assert.equal(formatPartialDate('2026-11-30', null), null);
+});
+
+test('a month-only record gets its own heading, apart from one really out that day', () => {
+  const groups = groupByDay([
+    item({ date: '2026-11-30', title: 'Exact' }),
+    item({ date: '2026-11-30', title: 'Sometime', date_precision: 'month' }),
+  ]);
+  assert.equal(groups.length, 2);
+  assert.equal(dayHeading(groups[1]!.date, NOW, groups[1]!.precision), 'Sometime in November 2026');
+  assert.equal(dayHeading(groups[0]!.date, NOW, groups[0]!.precision), 'Monday 30 November');
 });

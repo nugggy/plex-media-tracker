@@ -12,6 +12,7 @@
 import { db } from './db.ts';
 import * as store from './db.ts';
 import { today, daysAgo, nowIso } from './dates.ts';
+import { plexGet } from './plex.ts';
 import {
   resolveAir,
   showAirTimes,
@@ -271,6 +272,7 @@ export function recordWalk(showKey: string, lastEpisodeAt: string | null, at: st
 export async function syncEpisodes(
   onProgress?: (m: string) => void,
   force = false,
+  shouldStop: () => boolean = () => false,
 ): Promise<EpisodeSyncResult> {
   const token = store.getSetting('plex_token');
   const result: EpisodeSyncResult = {
@@ -305,6 +307,8 @@ export async function syncEpisodes(
   let next = 0;
   const worker = async (): Promise<void> => {
     for (;;) {
+      // Stop is checked between shows, so each show walked is saved whole.
+      if (shouldStop()) return;
       const i = next;
       next += 1;
       if (i >= shows.length) return;
@@ -573,12 +577,16 @@ interface LocalEpisode {
  * Every episode actually on the local server, so a tick can mean "I have this
  * episode" rather than the far weaker "I have this series". The whole TV
  * section comes back in a handful of paged requests over the LAN.
+ *
+ * Returns how many episodes were stored, or -1 when Stop cut the read short
+ * and the stored list was left as it was.
  */
 export async function syncLocalEpisodes(
   baseUrl: string,
   token: string,
   sectionKeys: string[],
   onProgress?: (m: string) => void,
+  shouldStop: () => boolean = () => false,
 ): Promise<number> {
   const rows: {
     guid: string;
@@ -593,16 +601,22 @@ export async function syncLocalEpisodes(
   for (const key of sectionKeys) {
     let start = 0;
     for (;;) {
+      // The table is replaced whole at the end, so a list cut short by Stop
+      // would look like episodes had vanished. Leave the last full read alone.
+      if (shouldStop()) return -1;
       onProgress?.(`Reading episodes already on the server (${rows.length})`);
-      const url =
-        `${baseUrl.replace(/\/+$/, '')}/library/sections/${key}/all?type=4&includeGuids=1` +
-        `&X-Plex-Container-Start=${start}&X-Plex-Container-Size=500&X-Plex-Token=${token}`;
-      const res = await fetch(url, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (!res.ok) throw new Error(`Plex returned HTTP ${res.status}`);
-      const data = (await res.json()) as { MediaContainer?: { Metadata?: LocalEpisode[] } };
+      const data = (await plexGet(
+        baseUrl,
+        token,
+        `/library/sections/${encodeURIComponent(key)}/all`,
+        {
+          type: '4',
+          includeGuids: '1',
+          'X-Plex-Container-Start': String(start),
+          'X-Plex-Container-Size': '500',
+        },
+        60_000,
+      )) as unknown as { MediaContainer?: { Metadata?: LocalEpisode[] } };
       const batch = data.MediaContainer?.Metadata ?? [];
       for (const e of batch) {
         if (!e.grandparentGuid || typeof e.parentIndex !== 'number' || typeof e.index !== 'number') {

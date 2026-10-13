@@ -6,6 +6,9 @@ on:
   push:
     tags: ['v*']
 
+# Actions are pinned to full commit hashes so a moved tag cannot change what
+# runs with the signing key. The comment gives the release each hash is.
+
 permissions:
   contents: write
 
@@ -13,15 +16,25 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
-      - uses: actions/setup-java@v4
+      - name: Check the tag matches the version
+        # A tag that disagrees with package.json would publish an APK the phones
+        # read as some other version, so stop before building anything.
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version."
+            exit 1
+          fi
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
       - run: npm ci
       - run: npm run typecheck && npm test
       - run: npm run build:mobile && npx cap sync android
@@ -32,15 +45,14 @@ jobs:
           if [ -z "$PMT_KEYSTORE_B64" ]; then echo "PMT_KEYSTORE_B64 secret is missing"; exit 1; fi
           echo "$PMT_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
       - name: Check the signing key opens
-        # Prints only a fingerprint and a length, never the key or password, so
-        # a bad secret can be told apart from a damaged key file.
+        # Prints only the start of the key file's fingerprint, never the key or
+        # password, so a bad secret can be told apart from a damaged key file.
         env:
           PMT_KEYSTORE_PASSWORD: ${{ secrets.PMT_KEYSTORE_PASSWORD }}
         run: |
           echo "key file sha256 starts: $(sha256sum "$RUNNER_TEMP/release.jks" | cut -c1-16)"
-          echo "password length: ${#PMT_KEYSTORE_PASSWORD}"
           if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$PMT_KEYSTORE_PASSWORD" > /dev/null 2>&1; then
-            echo "::error::The key file did not open with PMT_KEYSTORE_PASSWORD. Compare the fingerprint and length above with the PC's."
+            echo "::error::The key file did not open with PMT_KEYSTORE_PASSWORD. Compare the fingerprint above with the PC's key file."
             exit 1
           fi
           echo "Signing key opens."
@@ -49,11 +61,13 @@ jobs:
         env:
           PMT_KEYSTORE: ${{ runner.temp }}/release.jks
           PMT_KEYSTORE_PASSWORD: ${{ secrets.PMT_KEYSTORE_PASSWORD }}
+          # Optional. Only needed when the key's password differs from the store's.
+          PMT_KEY_PASSWORD: ${{ secrets.PMT_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
       - name: Name the APK
         run: cp android/app/build/outputs/apk/release/app-release.apk "plex-media-tracker-${GITHUB_REF_NAME#v}.apk"
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: plex-media-tracker-*.apk

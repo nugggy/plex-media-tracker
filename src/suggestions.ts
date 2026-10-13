@@ -228,16 +228,6 @@ interface PlexItem {
   type?: string;
 }
 
-async function plexJson(base: string, token: string, path: string): Promise<unknown> {
-  const url = `${base.replace(/\/+$/, '')}${path}${path.includes('?') ? '&' : '?'}X-Plex-Token=${token}`;
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(25_000),
-  });
-  if (!res.ok) throw new Error(`Plex returned HTTP ${res.status}`);
-  return res.json();
-}
-
 /**
  * Plex's own similar-item endpoint only ever returns titles already in the
  * library, so it cannot suggest anything new. TMDB recommendations can, and the

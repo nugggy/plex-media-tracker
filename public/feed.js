@@ -5,12 +5,12 @@
  * imports from here; nothing here knows a page exists.
  */
 
-export const ALL_TYPES = ['album', 'ep', 'single', 'movie', 'show'];
+/* Singles are not tracked: the feed is albums, EPs, films and shows. */
+export const ALL_TYPES = ['album', 'ep', 'movie', 'show'];
 
 export const TYPE_LABELS = {
   album: 'Albums',
   ep: 'EPs',
-  single: 'Singles',
   movie: 'Films',
   show: 'Shows',
 };
@@ -18,7 +18,6 @@ export const TYPE_LABELS = {
 export const KIND_TAG = {
   album: 'album',
   ep: 'EP',
-  single: 'single',
   movie: 'film',
   show: 'show',
 };
@@ -94,6 +93,18 @@ export function formatDate(iso) {
   if (!iso) return 'date unknown';
   const [y, m, d] = iso.split('-').map(Number);
   return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/**
+ * MusicBrainz sometimes knows only the month or the year. The server stores
+ * those at the end of the period, so a record is not called out before it can
+ * be, and says how much of the date is real. Showing "30 November" would be a
+ * day nobody announced, so only the known part is shown.
+ */
+export function formatPartialDate(iso, precision) {
+  if (!iso || !precision || precision === 'day') return null;
+  const [y, m] = iso.split('-').map(Number);
+  return precision === 'month' ? `${MONTHS[m - 1]} ${y}` : `${y}`;
 }
 
 /*
@@ -315,8 +326,10 @@ const DAYS = [
  * looking down a week that is what you scan for, and the year is added only
  * when it is not the current one, since repeating it on every row is noise.
  */
-export function dayHeading(iso, now = new Date()) {
+export function dayHeading(iso, now = new Date(), precision = 'day') {
   if (!iso) return 'Date unknown';
+  const partial = formatPartialDate(iso, precision);
+  if (partial) return `Sometime in ${partial}`;
   const [y, m, d] = iso.split('-').map(Number);
   const weekday = DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   const stem = `${weekday} ${d} ${MONTHS[m - 1]}`;
@@ -340,12 +353,16 @@ export function groupByDay(rows) {
       undated.push(r);
       continue;
     }
-    const existing = byDate.get(r.date);
-    if (existing) existing.push(r);
-    else byDate.set(r.date, [r]);
+    // A month-only record shares its stored date with anything really out on
+    // the last day of that month, but belongs under its own heading.
+    const precision = formatPartialDate(r.date, r.date_precision) ? r.date_precision : 'day';
+    const key = `${r.date}|${precision}`;
+    const existing = byDate.get(key);
+    if (existing) existing.items.push(r);
+    else byDate.set(key, { date: r.date, precision, items: [r] });
   }
 
-  const groups = [...byDate.entries()].map(([date, items]) => ({ date, items }));
+  const groups = [...byDate.values()];
   if (undated.length) groups.push({ date: null, items: undated });
   return groups;
 }
@@ -354,7 +371,7 @@ export function groupByDay(rows) {
  * Thirty of the top fifty country albums are usually older than a year, so
  * without this the tab is mostly records you have owned for decades. A row
  * with no date is never catalogue: Apple omits the date on some brand new
- * singles, and hiding something new for want of a date is the worse error.
+ * releases, and hiding something new for want of a date is the worse error.
  *
  * Uses calendar arithmetic to compare exact years, not elapsed days, because
  * 365 days does not equal twelve calendar months. A record released exactly

@@ -151,6 +151,7 @@ export function filmsDueForDates(now: number = Date.now()): { rating_key: string
 
 export async function syncFilmDates(
   onProgress?: (m: string) => void,
+  shouldStop: () => boolean = () => false,
 ): Promise<FilmDateSync> {
   const key = store.getSetting('tmdb_api_key').trim();
   const plexToken = store.getSetting('plex_token');
@@ -171,6 +172,8 @@ export async function syncFilmDates(
   const films = filmsDueForDates();
 
   for (let i = 0; i < films.length; i += 1) {
+    // Each film's dates are saved as they arrive, so stopping loses nothing.
+    if (shouldStop()) break;
     const film = films[i]!;
     onProgress?.(`Film dates, ${i + 1} of ${films.length}: ${film.title}`);
     try {

@@ -35,7 +35,7 @@
       </div>
     </header>
 
-    <div id="progress" class="progress" hidden>
+    <div id="progress" class="progress" role="status" aria-live="off" hidden>
       <div class="progress-head">
         <span id="progress-message">Working</span>
         <span id="progress-count" class="muted"></span>
@@ -45,27 +45,27 @@
       <div id="progress-current" class="muted small"></div>
     </div>
 
-    <div id="banner" class="banner" hidden></div>
+    <div id="banner" class="banner" role="status" aria-live="polite" hidden></div>
 
-    <nav class="tabs" role="tablist">
-      <button class="tab is-active" data-tab="out" role="tab">
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab is-active" data-tab="out" role="tab" id="tab-out" aria-controls="panel-out" aria-selected="true" tabindex="0">
         Out now <span class="pill" id="count-out">0</span>
       </button>
-      <button class="tab" data-tab="upcoming" role="tab">
+      <button class="tab" data-tab="upcoming" role="tab" id="tab-upcoming" aria-controls="panel-upcoming" aria-selected="false" tabindex="-1">
         Coming soon <span class="pill" id="count-upcoming">0</span>
       </button>
-      <button class="tab" data-tab="dash" role="tab">
+      <button class="tab" data-tab="dash" role="tab" id="tab-dash" aria-controls="panel-dash" aria-selected="false" tabindex="-1">
         Dashboard <span class="pill" id="count-streams" hidden>0</span>
       </button>
-      <button class="tab" data-tab="following" role="tab">Following</button>
-      <button class="tab" data-tab="discover" role="tab">Discover</button>
-      <button class="tab" data-tab="library" role="tab">Library</button>
-      <button class="tab" data-tab="settings" role="tab">Settings</button>
+      <button class="tab" data-tab="following" role="tab" id="tab-following" aria-controls="panel-following" aria-selected="false" tabindex="-1">Following</button>
+      <button class="tab" data-tab="discover" role="tab" id="tab-discover" aria-controls="panel-discover" aria-selected="false" tabindex="-1">Discover</button>
+      <button class="tab" data-tab="library" role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false" tabindex="-1">Library</button>
+      <button class="tab" data-tab="settings" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Settings</button>
     </nav>
 
     <main>
       <!-- Out now ------------------------------------------------------- -->
-      <section id="panel-out" class="panel">
+      <section id="panel-out" class="panel" role="tabpanel" aria-labelledby="tab-out">
         <div class="panel-head">
           <p class="muted">
             Out recently and not on your server yet. Shows appear when a new episode airs.
@@ -79,7 +79,7 @@
       </section>
 
       <!-- Coming soon --------------------------------------------------- -->
-      <section id="panel-upcoming" class="panel" hidden>
+      <section id="panel-upcoming" class="panel" role="tabpanel" aria-labelledby="tab-upcoming" hidden>
         <div class="panel-head">
           <p class="muted">Dated in the future. Announced records and films turn up here first.</p>
         </div>
@@ -88,7 +88,7 @@
       </section>
 
       <!-- Dashboard ----------------------------------------------------- -->
-      <section id="panel-dash" class="panel" hidden>
+      <section id="panel-dash" class="panel" role="tabpanel" aria-labelledby="tab-dash" hidden>
         <div class="panel-head">
           <p class="muted">
             Read live from your Plex server each time you open this tab. Now playing refreshes every
@@ -154,18 +154,18 @@
       </section>
 
       <!-- Following: watchlist, artists ------------------------------------ -->
-      <section id="panel-following" class="panel" hidden>
+      <section id="panel-following" class="panel" role="tabpanel" aria-labelledby="tab-following" hidden>
         <nav class="subtabs" role="tablist" aria-label="Following">
-          <button class="subtab is-active" data-sub="watchlist" role="tab">
+          <button class="subtab is-active" data-sub="watchlist" role="tab" id="subtab-watchlist" aria-controls="panel-watchlist" aria-selected="true" tabindex="0">
             Watchlist <span class="pill" id="count-watchlist">0</span>
           </button>
-          <button class="subtab" data-sub="artists" role="tab">
+          <button class="subtab" data-sub="artists" role="tab" id="subtab-artists" aria-controls="panel-artists" aria-selected="false" tabindex="-1">
             Artists <span class="pill" id="count-artists">0</span>
           </button>
         </nav>
 
       <!-- Watchlist ----------------------------------------------------- -->
-      <section id="panel-watchlist" class="subpanel">
+      <section id="panel-watchlist" class="subpanel" role="tabpanel" aria-labelledby="subtab-watchlist">
         <div class="panel-head">
           <p class="muted">Your Plex watchlist. Removing here removes it from Plex too.</p>
         </div>
@@ -184,7 +184,7 @@
               </p>
               <input
                 type="search"
-                id="gaps-filter"
+                id="gaps-filter" aria-label="Filter shows not tracked"
                 class="input search"
                 placeholder="Filter"
                 autocomplete="off"
@@ -196,14 +196,14 @@
         <div class="filters">
           <input
             type="search"
-            id="wl-filter"
+            id="wl-filter" aria-label="Search your watchlist"
             class="input search"
             placeholder="Search your watchlist"
             autocomplete="off"
           />
           <div class="chips" id="wl-chips" role="group" aria-label="Type">
-            <button type="button" class="chip is-on" data-wl="movie">Films</button>
-            <button type="button" class="chip is-on" data-wl="show">Shows</button>
+            <button type="button" class="chip is-on" data-wl="movie" aria-pressed="true">Films</button>
+            <button type="button" class="chip is-on" data-wl="show" aria-pressed="true">Shows</button>
           </div>
           <select class="input" id="wl-sort" aria-label="Sort watchlist">
             <option value="title">Title A to Z</option>
@@ -222,11 +222,11 @@
       </section>
 
       <!-- Artists ------------------------------------------------------- -->
-      <section id="panel-artists" class="subpanel" hidden>
+      <section id="panel-artists" class="subpanel" role="tabpanel" aria-labelledby="subtab-artists" hidden>
         <div class="filters">
           <input
             type="search"
-            id="artist-filter"
+            id="artist-filter" aria-label="Search artists"
             class="input search"
             placeholder="Search artists"
             autocomplete="off"
@@ -256,16 +256,16 @@
       </section>
 
       <!-- Discover: suggestions, trending, friends, search ---------------- -->
-      <section id="panel-discover" class="panel" hidden>
+      <section id="panel-discover" class="panel" role="tabpanel" aria-labelledby="tab-discover" hidden>
         <nav class="subtabs" role="tablist" aria-label="Discover">
-          <button class="subtab is-active" data-sub="suggestions" role="tab">Suggestions</button>
-          <button class="subtab" data-sub="trending" role="tab">Trending</button>
-          <button class="subtab" data-sub="friends" role="tab">Friends</button>
-          <button class="subtab" data-sub="search" role="tab">Search</button>
+          <button class="subtab is-active" data-sub="suggestions" role="tab" id="subtab-suggestions" aria-controls="panel-suggestions" aria-selected="true" tabindex="0">Suggestions</button>
+          <button class="subtab" data-sub="trending" role="tab" id="subtab-trending" aria-controls="panel-trending" aria-selected="false" tabindex="-1">Trending</button>
+          <button class="subtab" data-sub="friends" role="tab" id="subtab-friends" aria-controls="panel-friends" aria-selected="false" tabindex="-1">Friends</button>
+          <button class="subtab" data-sub="search" role="tab" id="subtab-search" aria-controls="panel-search" aria-selected="false" tabindex="-1">Search</button>
         </nav>
 
       <!-- Suggestions --------------------------------------------------- -->
-      <section id="panel-suggestions" class="subpanel">
+      <section id="panel-suggestions" class="subpanel" role="tabpanel" aria-labelledby="subtab-suggestions">
         <div class="panel-head">
           <p class="muted">
             Built from what you already have. Artists come from ListenBrainz, films and shows from
@@ -276,15 +276,15 @@
         <div class="filters">
           <input
             type="search"
-            id="sg-filter"
+            id="sg-filter" aria-label="Search suggestions"
             class="input search"
             placeholder="Search suggestions"
             autocomplete="off"
           />
           <div class="chips" id="sg-chips" role="group" aria-label="Type">
-            <button type="button" class="chip is-on" data-sg="artist">Artists</button>
-            <button type="button" class="chip is-on" data-sg="movie">Films</button>
-            <button type="button" class="chip is-on" data-sg="show">Shows</button>
+            <button type="button" class="chip is-on" data-sg="artist" aria-pressed="true">Artists</button>
+            <button type="button" class="chip is-on" data-sg="movie" aria-pressed="true">Films</button>
+            <button type="button" class="chip is-on" data-sg="show" aria-pressed="true">Shows</button>
           </div>
           <label class="check">
             <input type="checkbox" id="sg-previous" /> Include previous years
@@ -295,7 +295,7 @@
       </section>
 
       <!-- Trending -------------------------------------------------------- -->
-      <section id="panel-trending" class="subpanel" hidden>
+      <section id="panel-trending" class="subpanel" role="tabpanel" aria-labelledby="subtab-trending" hidden>
         <div class="panel-head">
           <p class="muted">
             What is popular right now. Films and shows from TMDB, country music from the US
@@ -306,16 +306,15 @@
         <div class="filters">
           <input
             type="search"
-            id="tr-filter"
+            id="tr-filter" aria-label="Search trending"
             class="input search"
             placeholder="Search trending"
             autocomplete="off"
           />
           <div class="chips" id="tr-chips" role="group" aria-label="Type">
-            <button type="button" class="chip is-on" data-tr="movie">Films</button>
-            <button type="button" class="chip is-on" data-tr="show">Shows</button>
-            <button type="button" class="chip is-on" data-tr="album">Albums</button>
-            <button type="button" class="chip" data-tr="single">Singles</button>
+            <button type="button" class="chip is-on" data-tr="movie" aria-pressed="true">Films</button>
+            <button type="button" class="chip is-on" data-tr="show" aria-pressed="true">Shows</button>
+            <button type="button" class="chip is-on" data-tr="album" aria-pressed="true">Albums</button>
           </div>
           <select class="input" id="tr-held" aria-label="Filter by Plex">
             <option value="all">In Plex or not</option>
@@ -331,7 +330,7 @@
       </section>
 
       <!-- Friends ------------------------------------------------------- -->
-      <section id="panel-friends" class="subpanel" hidden>
+      <section id="panel-friends" class="subpanel" role="tabpanel" aria-labelledby="subtab-friends" hidden>
         <div class="panel-head">
           <p class="muted">
             What your Plex friends have on their watchlists. Only friends who share their
@@ -345,14 +344,14 @@
           </select>
           <input
             type="search"
-            id="fr-filter"
+            id="fr-filter" aria-label="Search friends' watchlists"
             class="input search"
             placeholder="Search friends' watchlists"
             autocomplete="off"
           />
           <div class="chips" id="fr-chips" role="group" aria-label="Type">
-            <button type="button" class="chip is-on" data-fr="movie">Films</button>
-            <button type="button" class="chip is-on" data-fr="show">Shows</button>
+            <button type="button" class="chip is-on" data-fr="movie" aria-pressed="true">Films</button>
+            <button type="button" class="chip is-on" data-fr="show" aria-pressed="true">Shows</button>
           </div>
           <label class="check">
             <input type="checkbox" id="fr-hide-held" checked /> Hide what I have
@@ -363,7 +362,7 @@
       </section>
 
       <!-- Search -------------------------------------------------------- -->
-      <section id="panel-search" class="subpanel" hidden>
+      <section id="panel-search" class="subpanel" role="tabpanel" aria-labelledby="subtab-search" hidden>
         <div class="panel-head">
           <p class="muted">
             Search Plex and MusicBrainz, then add a film or show to your Plex watchlist, or start
@@ -373,15 +372,15 @@
         <div class="filters">
           <input
             type="search"
-            id="search-box"
+            id="search-box" aria-label="Film, show or artist"
             class="input search"
             placeholder="Film, show or artist"
             autocomplete="off"
           />
           <div class="chips" id="search-chips" role="group" aria-label="What to search">
-            <button type="button" class="chip is-on" data-sk="movie">Films</button>
-            <button type="button" class="chip is-on" data-sk="show">Shows</button>
-            <button type="button" class="chip is-on" data-sk="artist">Artists</button>
+            <button type="button" class="chip is-on" data-sk="movie" aria-pressed="true">Films</button>
+            <button type="button" class="chip is-on" data-sk="show" aria-pressed="true">Shows</button>
+            <button type="button" class="chip is-on" data-sk="artist" aria-pressed="true">Artists</button>
           </div>
           <button type="button" class="btn btn-primary" id="search-go">Search</button>
         </div>
@@ -391,14 +390,14 @@
       </section>
 
       <!-- Library: housekeeping, lyrics ----------------------------------- -->
-      <section id="panel-library" class="panel" hidden>
+      <section id="panel-library" class="panel" role="tabpanel" aria-labelledby="tab-library" hidden>
         <nav class="subtabs" role="tablist" aria-label="Library">
-          <button class="subtab is-active" data-sub="housekeeping" role="tab">Housekeeping</button>
-          <button class="subtab" data-sub="lyrics" role="tab">Lyrics</button>
+          <button class="subtab is-active" data-sub="housekeeping" role="tab" id="subtab-housekeeping" aria-controls="panel-housekeeping" aria-selected="true" tabindex="0">Housekeeping</button>
+          <button class="subtab" data-sub="lyrics" role="tab" id="subtab-lyrics" aria-controls="panel-lyrics" aria-selected="false" tabindex="-1">Lyrics</button>
         </nav>
 
       <!-- Housekeeping -------------------------------------------------- -->
-      <section id="panel-housekeeping" class="subpanel">
+      <section id="panel-housekeeping" class="subpanel" role="tabpanel" aria-labelledby="subtab-housekeeping">
         <div class="panel-head">
           <p class="muted">
             Housekeeping on what is already on your server. Nothing here is fetched from the
@@ -425,7 +424,7 @@
                 never reported as broken.
               </p>
             </div>
-            <input type="search" id="miss-filter" class="input search" placeholder="Filter shows" />
+            <input type="search" id="miss-filter" aria-label="Filter shows" class="input search" placeholder="Filter shows" />
           </div>
           <div id="missing-list" class="artists"></div>
         </section>
@@ -452,7 +451,7 @@
       </section>
 
       <!-- Lyrics -------------------------------------------------------- -->
-      <section id="panel-lyrics" class="subpanel" hidden>
+      <section id="panel-lyrics" class="subpanel" role="tabpanel" aria-labelledby="subtab-lyrics" hidden>
         <div class="panel-head">
           <p class="muted">
             Which tracks in your music library have no lyrics. Found lyrics are kept here until you
@@ -481,7 +480,7 @@
       </section>
 
       <!-- Settings ------------------------------------------------------ -->
-      <section id="panel-settings" class="panel" hidden>
+      <section id="panel-settings" class="panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
         <form id="settings-form" class="form">
           <fieldset>
             <legend>Plex server</legend>
@@ -631,7 +630,6 @@
             <div class="row wrap">
               <label class="check"><input type="checkbox" id="include_album" /> Albums</label>
               <label class="check"><input type="checkbox" id="include_ep" /> EPs</label>
-              <label class="check"><input type="checkbox" id="include_single" /> Singles</label>
             </div>
             <p class="muted small">
               Live records, compilations, remix collections, soundtracks and reissues are always

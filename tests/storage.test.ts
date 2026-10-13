@@ -9,6 +9,9 @@ function memFs(crashOn?: 'remove' | 'rename'): FileApi & { files: Map<string, Ui
     async read(n) {
       return files.get(n) ?? null;
     },
+    async exists(n) {
+      return files.has(n);
+    },
     async write(n, b) {
       files.set(n, b);
     },
@@ -57,6 +60,17 @@ test('a half-written new copy is ignored in favour of the last good one', async 
   fs.files.set('tracker.db.tmp', bytes(9));
   const valid = (b: Uint8Array) => b[0] !== 9;
   assert.deepEqual(await loadDatabase(fs, valid), bytes(1));
+});
+
+test('saving checks the old copy is there without reading it in', async () => {
+  const fs = memFs();
+  fs.files.set('tracker.db', bytes(1));
+  let reads = 0;
+  const counting: FileApi = { ...fs, read: async (n) => ((reads += 1), fs.read(n)) };
+  await saveDatabase(counting, bytes(2));
+  assert.equal(reads, 0);
+  assert.deepEqual(fs.files.get('tracker.db'), bytes(2));
+  assert.equal(fs.files.has('tracker.db.tmp'), false);
 });
 
 test('base64 round trip on a database-sized array', () => {

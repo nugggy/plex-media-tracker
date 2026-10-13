@@ -1,13 +1,16 @@
 apply plugin: 'com.android.application'
 
-// Release signing. On GitHub the key comes from repository secrets (PMT_KEYSTORE
-// and PMT_KEYSTORE_PASSWORD). On the PC it comes from keystore.properties in the
-// app's data folder, which sits outside the project so it never syncs or commits.
+// Release signing. On GitHub the key comes from repository secrets (PMT_KEYSTORE,
+// PMT_KEYSTORE_PASSWORD and, if the key has its own, PMT_KEY_PASSWORD). On the PC
+// it comes from keystore.properties in the app's data folder, which sits outside
+// the project so it never syncs or commits. A key with no password of its own
+// uses the store's.
 def ksProps = new Properties()
 def ksFile = new File(System.getenv('LOCALAPPDATA') ?: '', 'PlexMediaTracker/keystore.properties')
 if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
 def ksPath = System.getenv('PMT_KEYSTORE') ?: ksProps['storeFile']
 def ksPass = System.getenv('PMT_KEYSTORE_PASSWORD') ?: ksProps['storePassword']
+def keyPass = System.getenv('PMT_KEY_PASSWORD') ?: ksProps['keyPassword'] ?: ksPass
 
 android {
     namespace = "com.nugggy.plexmediatracker"
@@ -16,8 +19,8 @@ android {
         applicationId "com.nugggy.plexmediatracker"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10903
-        versionName "1.9.3"
+        versionCode 10904
+        versionName "1.9.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -31,7 +34,7 @@ android {
                 storeFile file(ksPath)
                 storePassword ksPass
                 keyAlias 'tracker'
-                keyPassword ksPass
+                keyPassword keyPass
             }
         }
     }

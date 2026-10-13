@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAppleChart, pickArtistMatch, mergeHidden, albumInLibrary } from '../src/trending.ts';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// Its own throwaway database, since importing trending opens one.
+process.env.PLEX_TRACKER_DATA_DIR = mkdtempSync(join(tmpdir(), 'pmt-trending-'));
+const { parseAppleChart, pickArtistMatch, mergeHidden, albumInLibrary } = await import('../src/trending.ts');
 
 /** An album entry. Apple gives albums a single link object. */
 const albumEntry = {
@@ -15,7 +21,7 @@ const albumEntry = {
   link: { attributes: { href: 'https://music.apple.com/us/album/thats-just-me/6770725355' } },
 };
 
-/** A song entry. Apple gives songs an array of links instead. */
+/** The same entry with its link given as an array, which Apple has also used. */
 const songEntry = {
   ...albumEntry,
   link: [{ attributes: { href: 'https://music.apple.com/us/album/last-thing/6812476961' } }],
@@ -62,9 +68,9 @@ test('artwork is chosen by height even when out of size order', () => {
   );
 });
 
-test('a song link arrives as an array where an album link is an object', () => {
+test('a link is read whether it arrives as an object or an array', () => {
   const album = parseAppleChart(feed([albumEntry]), 'album')[0]!;
-  const song = parseAppleChart(feed([songEntry]), 'single')[0]!;
+  const song = parseAppleChart(feed([songEntry]), 'album')[0]!;
   assert.equal(album.link, 'https://music.apple.com/us/album/thats-just-me/6770725355');
   assert.equal(song.link, 'https://music.apple.com/us/album/last-thing/6812476961');
 });
@@ -153,7 +159,7 @@ test('hiding one row leaves the others alone', () => {
 });
 
 test('the same id under a different kind is a different row', () => {
-  const rows = mergeHidden([stored({ kind: 'single' })], new Set(['album:1']));
+  const rows = mergeHidden([stored({ kind: 'movie' })], new Set(['album:1']));
   assert.equal(rows.length, 1);
 });
 
@@ -211,4 +217,19 @@ test('no resolved artist at all, standing in for a null mbid, is refused', () =>
 test('a manually watched artist is refused even if it somehow carries album rows', () => {
   const artist = { plexKey: 'manual:abc123', albumTitles: new Set(['Chief']) };
   assert.equal(albumInLibrary('Chief', artist), false);
+});
+
+/* ----------------------------------------------------- singles are gone */
+
+test('there is no singles chart any more, and stored single rows are cleared', async () => {
+  const { db } = await import('../src/db.ts');
+  const { builtAt, listTrending } = await import('../src/trending.ts');
+  db.exec(`INSERT OR REPLACE INTO trending_items (kind, id, rank, title, built_at)
+           VALUES ('album', 'a1', 1, 'An album', '2026-10-01T00:00:00.000Z')`);
+  assert.deepEqual(Object.keys(builtAt()).sort(), ['album', 'movie', 'show']);
+  assert.equal(listTrending().some((r) => (r.kind as string) === 'single'), false);
+  assert.equal(
+    (db.prepare("SELECT COUNT(*) AS n FROM trending_items WHERE kind = 'single'").get() as { n: number }).n,
+    0,
+  );
 });

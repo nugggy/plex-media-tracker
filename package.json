@@ -1,6 +1,6 @@
 {
   "name": "plex-media-tracker",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "private": true,
   "type": "module",
   "description": "Tracks new music releases from your Plex library artists, plus films and shows on your Plex watchlist.",
@@ -9,7 +9,6 @@
     "scan": "node src/scan-cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"tests/*.test.ts\"",
-    "build:spike": "node scripts/build-spike.mjs",
     "build:mobile": "node scripts/build-mobile.mjs"
   },
   "devDependencies": {

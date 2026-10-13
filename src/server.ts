@@ -4,6 +4,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PORT, DB_PATH, APP_NAME } from './config.ts';
 import { handleApi } from './api.ts';
+import { refuseRequest } from './origin.ts';
 import { isConfigured } from './db.ts';
 import { startBackgroundSync } from './startup.ts';
 
@@ -21,6 +22,18 @@ const MIME: Record<string, string> = {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+
+  // Checked here rather than in handleApi, since the phone reaches handleApi
+  // through route.ts with no headers at all.
+  if (url.pathname.startsWith('/api/') || url.pathname === '/thumb') {
+    const refused = refuseRequest(req.method, req.headers, PORT);
+    if (refused) {
+      res
+        .writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify({ error: refused }));
+      return;
+    }
+  }
 
   if (await handleApi(req, res, url)) return;
 

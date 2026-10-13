@@ -28,6 +28,8 @@ export interface ReleaseRow {
   primary_type: string | null;
   secondary_types: string | null;
   release_date: string | null;
+  /** 'year' or 'month' when MusicBrainz gave only part of the date; 'day' or null for a full one. */
+  date_precision: string | null;
   owned: number;
   first_seen_at: string;
   dismissed: number;
@@ -187,10 +189,70 @@ CREATE TABLE IF NOT EXISTS scans (
   new_releases INTEGER NOT NULL DEFAULT 0,
   message      TEXT
 );
+
+-- Data fixes that must happen exactly once, by name.
+CREATE TABLE IF NOT EXISTS migrations (
+  name   TEXT PRIMARY KEY,
+  ran_at TEXT NOT NULL
+);
 `;
 
 export const db: Db = openDatabase();
 db.exec(SCHEMA);
+
+/* -------------------------------------------------------------- migrations */
+
+// Lightweight migration: databases made before partial dates were told apart.
+try {
+  db.exec('ALTER TABLE releases ADD COLUMN date_precision TEXT');
+} catch {
+  // Column already present.
+}
+
+/**
+ * Runs a data fix once per database. Adding a column can simply be tried every
+ * start, but a fix that rewrites rows cannot always tell a fixed row from one
+ * still waiting, so it is recorded by name instead.
+ */
+export function runOnce(name: string, fix: () => void): void {
+  const done = () => Boolean(db.prepare('SELECT 1 AS done FROM migrations WHERE name = ?').get(name));
+  if (done()) return;
+  // IMMEDIATE takes the write lock before reading, so two processes starting
+  // together (the server and a command-line scan, or tests) queue for it
+  // rather than both reading "not done" and one failing as locked.
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    if (done()) {
+      db.exec('COMMIT');
+      return;
+    }
+    fix();
+    db.prepare('INSERT INTO migrations (name, ran_at) VALUES (?, ?)').run(name, nowIso());
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// Partial MusicBrainz dates used to be padded to the first day of their month
+// or year, which put records into Out now early. A stored row cannot say
+// whether its first-of-the-month date was real or padded, so instead the
+// artists with any such date recent enough to matter are marked as due, and
+// the next check rewrites their releases with the corrected padding.
+runOnce('2026-10-partial-dates-at-period-end', () => {
+  db.prepare(
+    `UPDATE artists SET last_checked_at = NULL
+     WHERE plex_key IN (SELECT plex_key FROM releases
+                        WHERE release_date LIKE '%-01' AND release_date >= ?)`,
+  ).run(daysAgo(400));
+});
+
+// Singles are no longer tracked: the feeds are albums, EPs, films and shows.
+runOnce('2026-10-drop-singles', () => {
+  db.exec("DELETE FROM releases WHERE lower(primary_type) = 'single'");
+  db.exec("DELETE FROM settings WHERE key = 'include_single'");
+});
 
 /* ---------------------------------------------------------------- settings */
 
@@ -208,7 +270,6 @@ const DEFAULTS: Record<string, string> = {
   stale_days: '7',
   include_album: '1',
   include_ep: '1',
-  include_single: '1',
   include_movie: '1',
   include_show: '1',
   watchlist_enabled: '1',
@@ -287,14 +348,32 @@ export function upsertArtist(a: {
  * synthetic `manual:<mbid>` key that never appears in a Plex scan, since it
  * is not a Plex library artist at all; without this exemption a scan would
  * un-watch every one of them the moment it runs.
+ *
+ * Returns how many artists are now absent, or -1 when Plex listed none and
+ * nothing was changed.
  */
 export function markAbsentArtists(seenKeys: string[]): number {
-  db.exec("UPDATE artists SET present = 0 WHERE plex_key NOT LIKE 'manual:%'");
-  const chunkSize = 400;
-  for (let i = 0; i < seenKeys.length; i += chunkSize) {
-    const chunk = seenKeys.slice(i, i + chunkSize);
-    const placeholders = chunk.map(() => '?').join(',');
-    db.prepare(`UPDATE artists SET present = 1 WHERE plex_key IN (${placeholders})`).run(...chunk);
+  // An empty list far more likely means Plex answered badly, or the wrong
+  // section is chosen, than that every artist has gone. Marking on it would
+  // empty the feeds in one go, so the last good read is kept instead.
+  if (seenKeys.length === 0) {
+    console.warn('Plex listed no artists, so none were marked as gone.');
+    return -1;
+  }
+  // One transaction, so a failure part way never leaves every artist absent.
+  db.exec('BEGIN');
+  try {
+    db.exec("UPDATE artists SET present = 0 WHERE plex_key NOT LIKE 'manual:%'");
+    const chunkSize = 400;
+    for (let i = 0; i < seenKeys.length; i += chunkSize) {
+      const chunk = seenKeys.slice(i, i + chunkSize);
+      const placeholders = chunk.map(() => '?').join(',');
+      db.prepare(`UPDATE artists SET present = 1 WHERE plex_key IN (${placeholders})`).run(...chunk);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
   }
   const row = db.prepare('SELECT COUNT(*) AS n FROM artists WHERE present = 0').get() as {
     n: number;
@@ -417,13 +496,14 @@ export function upsertRelease(r: {
   primary_type: string | null;
   secondary_types: string | null;
   release_date: string | null;
+  date_precision?: string | null;
   owned: boolean;
 }): boolean {
   const existing = db.prepare('SELECT mb_id FROM releases WHERE mb_id = ?').get(r.mb_id);
   if (existing) {
     db.prepare(
       `UPDATE releases SET title = ?, norm_title = ?, primary_type = ?, secondary_types = ?,
-                           release_date = ?, owned = ?, plex_key = ?
+                           release_date = ?, date_precision = ?, owned = ?, plex_key = ?
        WHERE mb_id = ?`,
     ).run(
       r.title,
@@ -431,6 +511,7 @@ export function upsertRelease(r: {
       r.primary_type,
       r.secondary_types,
       r.release_date,
+      r.date_precision ?? null,
       r.owned ? 1 : 0,
       r.plex_key,
       r.mb_id,
@@ -439,8 +520,8 @@ export function upsertRelease(r: {
   }
   db.prepare(
     `INSERT INTO releases (mb_id, plex_key, title, norm_title, primary_type, secondary_types,
-                           release_date, owned, first_seen_at, dismissed)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+                           release_date, date_precision, owned, first_seen_at, dismissed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
   ).run(
     r.mb_id,
     r.plex_key,
@@ -449,6 +530,7 @@ export function upsertRelease(r: {
     r.primary_type,
     r.secondary_types,
     r.release_date,
+    r.date_precision ?? null,
     r.owned ? 1 : 0,
     nowIso(),
   );

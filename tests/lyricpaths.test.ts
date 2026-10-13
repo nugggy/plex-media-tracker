@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nasHost, toSharePath, sidecarPath } from '../src/lyricpaths.ts';
+import { nasHost, toSharePath, sidecarPath, climbsOut } from '../src/lyricpaths.ts';
 
 const SONG = '/share/CACHEDEV1_DATA/Nuggy NAS Shared Folder/PLEX Library/Music/Kryptonite.mp3';
 
@@ -30,4 +30,19 @@ test('the lyric file takes the song name exactly, with only the extension change
     String.raw`\\nas\Music\01. Kryptonite.lrc`,
   );
   assert.equal(sidecarPath(String.raw`\\nas\Mr. Big\Track`, 'txt'), String.raw`\\nas\Mr. Big\Track.txt`);
+});
+
+test('a path that climbs out of the share is refused, whichever slash it uses', () => {
+  const nas = 'http://192.168.0.162:32400';
+  assert.equal(toSharePath('/share/CACHEDEV1_DATA/Music/../Secrets/song.mp3', nas), null);
+  assert.equal(toSharePath(String.raw`/share/CACHEDEV1_DATA/Music/a\..\..\song.mp3`, nas), null);
+  assert.equal(toSharePath('/share/CACHEDEV1_DATA/Music/.../song.mp3', nas), null);
+  assert.equal(toSharePath('/share/CACHEDEV1_DATA/Music/.. /song.mp3', nas), null);
+});
+
+test('dots inside a name are not mistaken for climbing out', () => {
+  assert.equal(climbsOut('/share/Music/Mr.. Mister/..Live../song...mp3'), false);
+  assert.equal(climbsOut('/share/Music/./song.mp3'), false);
+  assert.equal(climbsOut('/share/Music/../song.mp3'), true);
+  assert.equal(climbsOut(String.raw`\\nas\Music\..\song.mp3`), true);
 });

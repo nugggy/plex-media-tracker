@@ -13,8 +13,6 @@ const {
   DURATION_TOLERANCE_S,
   saveLyric,
   getLyric,
-  recordMiss,
-  lastMiss,
   trackStates,
 } = await import('../src/lyrics.ts');
 
@@ -92,12 +90,25 @@ test('a track with no known duration takes the first candidate by the right arti
   assert.equal(pickCandidate({ ...TRACK, duration_ms: null }, [c]), c);
 });
 
-/* -------------------------------------------------------------- the miss cache */
+test('a candidate with no duration is passed over when the track has one', () => {
+  const unknown = candidate({ id: 4, duration: undefined });
+  const near = candidate({ id: 5, duration: 201 });
+  assert.equal(pickCandidate(TRACK, [unknown]), null);
+  assert.equal(pickCandidate(TRACK, [unknown, near]), near);
+});
 
-const NOW = Date.parse('2026-09-29T08:00:00.000Z');
-const daysAgo = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
+test('a track with no known duration still takes a candidate with none', () => {
+  const unknown = candidate({ duration: undefined });
+  assert.equal(pickCandidate({ ...TRACK, duration_ms: null }, [unknown]), unknown);
+});
 
 /* ------------------------------------------------------------------ storage */
+
+test('the old misses table is dropped, since nothing reads it any more', async () => {
+  const { db } = await import('../src/db.ts');
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'lyrics_misses'").get();
+  assert.equal(row, undefined);
+});
 
 test('a lyric is stored and read back, and replaces an earlier one', () => {
   saveLyric(TRACK, { synced: null, plain: 'first', instrumental: false }, 'lrclib');
@@ -107,13 +118,6 @@ test('a lyric is stored and read back, and replaces an earlier one', () => {
   assert.equal(got?.synced, '[00:01.00] second');
   assert.equal(got?.source, 'manual');
   assert.equal(getLyric('nobody'), undefined);
-});
-
-test('a miss is remembered by track, and a later find clears it', () => {
-  recordMiss('99', daysAgo(1));
-  assert.equal(lastMiss('99'), daysAgo(1));
-  saveLyric({ ...TRACK, rating_key: '99' }, { synced: null, plain: 'found', instrumental: false }, 'lrclib');
-  assert.equal(lastMiss('99'), undefined);
 });
 
 test('each track is covered, stored, instrumental or missing', () => {

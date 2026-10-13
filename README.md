@@ -66,8 +66,13 @@ default view the two match. Untick Hide what I have, or tick Cinema, and there
 will be more rows on screen than the tab counts.
 
 **Coming soon** is what is dated ahead. Defaults to the next 7 days. Both feeds
-carry the same controls: a search box, type chips for Albums, EPs, Singles,
+carry the same controls: a search box, type chips for Albums, EPs,
 Films and Shows, a sort order, and the time window.
+
+The app tracks albums and EPs from MusicBrainz. It does not track singles.
+When MusicBrainz knows only the month or the year of a release, the row shows
+just that, for example November 2026, and stays in Coming soon until that
+month or year is over.
 
 Both feeds group by day, under a heading naming the weekday and how far off it
 is, so you can see what lands on each day. Headings appear only while the list
@@ -127,23 +132,22 @@ lean heavily on catalogue. Tick **Include previous years** for the rest.
 things you already follow. Films and shows come from TMDB's weekly trending
 list and need the same free TMDB key as film dates and Suggestions; without
 one they cannot be fetched at all. Country music comes from the US Apple
-chart and needs no key, so the country charts work regardless. Albums are
-shown by default; press Singles for the singles chart.
+chart and needs no key, so the country album chart works regardless. The app
+does not track singles, so there is no singles chart.
 
 Each chart runs fifty deep, and the Catalogue tickbox hides anything released
 more than a year ago. Shows are exempt from that rule, because the only date
 the chart carries for a series is when it first aired, and a show can run for
 a decade, so judging one by its premiere would file a series airing new
-episodes this week alongside a record from 1973. Albums, singles and films
-still follow the rule as normal. By default films and shows keep the full
-fifty, and singles keep most of theirs, but the album chart is the one that
-thins out: in a typical week only about two in five of the top fifty country
+episodes this week alongside a record from 1973. Albums and films still follow
+the rule as normal. By default films and shows keep the full fifty, but the
+album chart thins out: in a typical week only about two in five of the top fifty country
 albums are less than a year old, the rest being records people have owned for
 years. Tick Catalogue to see the whole chart. The rank on each row is fixed
 once the chart is built and is never renumbered by hiding catalogue rows, so
 hiding catalogue leaves gaps in the sequence, such as 1, 2, 3, 5, 6, 8, rather
-than pretending the chart is shorter than it really is. For albums and
-singles that rank is Apple's own chart position; for films and shows it is
+than pretending the chart is shorter than it really is. For albums that
+rank is Apple's own chart position; for films and shows it is
 our position after removing TMDB's duplicate entries, not TMDB's.
 
 Building the chart takes a little over two minutes, most of it MusicBrainz

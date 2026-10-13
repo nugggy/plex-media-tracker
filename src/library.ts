@@ -8,6 +8,7 @@
 import { db } from './db.ts';
 import * as store from './db.ts';
 import { today } from './dates.ts';
+import { plexGet } from './plex.ts';
 
 /* ------------------------------------------------------------- migrations */
 
@@ -43,14 +44,10 @@ export function deepLink(ratingKey: string | null | undefined): string | null {
 }
 
 export async function fetchMachineId(baseUrl: string, token: string): Promise<string | null> {
+  if (!baseUrl) return null;
   try {
-    const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/?X-Plex-Token=${token}`, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { MediaContainer?: { machineIdentifier?: string } };
-    return data.MediaContainer?.machineIdentifier ?? null;
+    const data = await plexGet(baseUrl, token, '/', {}, 20_000);
+    return (data.MediaContainer as { machineIdentifier?: string } | undefined)?.machineIdentifier ?? null;
   } catch {
     return null;
   }

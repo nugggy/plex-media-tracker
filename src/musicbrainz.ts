@@ -106,6 +106,8 @@ export interface MbReleaseGroup {
   primaryType: string | null;
   secondaryTypes: string[];
   firstReleaseDate: string | null;
+  /** How much of firstReleaseDate MusicBrainz actually knows. */
+  datePrecision: DatePrecision | null;
 }
 
 interface MbBrowseResponse {
@@ -144,6 +146,7 @@ export async function browseReleaseGroups(artistMbid: string): Promise<MbRelease
         primaryType: rg['primary-type'] ?? null,
         secondaryTypes: rg['secondary-types'] ?? [],
         firstReleaseDate: normaliseDate(rg['first-release-date']),
+        datePrecision: datePrecision(rg['first-release-date']),
       });
     }
     if (batch.length === 0) break;
@@ -153,15 +156,36 @@ export async function browseReleaseGroups(artistMbid: string): Promise<MbRelease
   return out;
 }
 
+export type DatePrecision = 'day' | 'month' | 'year';
+
 /**
- * MusicBrainz dates can be a year, a year-month, or a full date. Pad partials
- * out so string comparison against an ISO date still behaves.
+ * MusicBrainz dates can be a year, a year-month, or a full date. Partials are
+ * padded out to the last day of their period, not the first: "2026-11" only
+ * says the record lands some time in November, so it is not out until
+ * November is over. Padding to the first put announced records into Out now
+ * weeks early. The padded value still compares as an ISO date everywhere.
  */
-function normaliseDate(raw: string | undefined): string | null {
+export function normaliseDate(raw: string | undefined): string | null {
   if (!raw) return null;
-  if (/^\d{4}$/.test(raw)) return `${raw}-01-01`;
-  if (/^\d{4}-\d{2}$/.test(raw)) return `${raw}-01`;
+  if (/^\d{4}$/.test(raw)) return `${raw}-12-31`;
+  const month = raw.match(/^(\d{4})-(\d{2})$/);
+  if (month) {
+    const m = Number(month[2]);
+    if (m < 1 || m > 12) return null;
+    // Day 0 of the next month is the last day of this one, leap years included.
+    const last = new Date(Date.UTC(Number(month[1]), m, 0)).getUTCDate();
+    return `${raw}-${String(last).padStart(2, '0')}`;
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return null;
+}
+
+/** Which part of a MusicBrainz date is real, so the page need not show a padded day as fact. */
+export function datePrecision(raw: string | undefined): DatePrecision | null {
+  if (!raw) return null;
+  if (/^\d{4}$/.test(raw)) return 'year';
+  if (/^\d{4}-\d{2}$/.test(raw)) return 'month';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return 'day';
   return null;
 }
 

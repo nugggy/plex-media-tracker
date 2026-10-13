@@ -6,6 +6,8 @@
  */
 export interface FileApi {
   read(name: string): Promise<Uint8Array | null>;
+  /** Whether the file is there, without reading it in. */
+  exists(name: string): Promise<boolean>;
   write(name: string, bytes: Uint8Array): Promise<void>;
   remove(name: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
@@ -16,7 +18,7 @@ const SIDE = 'tracker.db.tmp';
 
 export async function saveDatabase(fs: FileApi, bytes: Uint8Array): Promise<void> {
   await fs.write(SIDE, bytes);
-  if (await fs.read(MAIN)) await fs.remove(MAIN);
+  if (await fs.exists(MAIN)) await fs.remove(MAIN);
   await fs.rename(SIDE, MAIN);
 }
 

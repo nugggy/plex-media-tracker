@@ -43,6 +43,29 @@ for (const [name, open] of drivers) {
     );
   });
 
+  test(`${name}: many inserts in one transaction each report their own row id`, () => {
+    const db = setup();
+    const insert = db.prepare('INSERT INTO t (name, n) VALUES (?, ?)');
+    db.exec('BEGIN');
+    for (let i = 1; i <= 500; i += 1) {
+      const r = insert.run(`row ${i}`, i);
+      assert.equal(Number(r.lastInsertRowid), i);
+      assert.equal(r.changes, 1);
+    }
+    db.exec('COMMIT');
+    assert.equal(db.prepare('SELECT COUNT(*) AS c FROM t').get()?.c, 500);
+    assert.equal(db.prepare('SELECT name FROM t WHERE n = ?').get(250)?.name, 'row 250');
+  });
+
+  test(`${name}: an update reports changes, and a failed statement can be run again`, () => {
+    const db = setup();
+    for (const x of ['a', 'b']) db.prepare('INSERT INTO t (name) VALUES (?)').run(x);
+    assert.equal(db.prepare('UPDATE t SET n = ? WHERE name IS NOT NULL').run(7).changes, 2);
+    const insertWithId = db.prepare('INSERT INTO t (id, name) VALUES (?, ?)');
+    assert.throws(() => insertWithId.run(1, 'clash'));
+    assert.equal(Number(insertWithId.run(10, 'fine').lastInsertRowid), 10);
+  });
+
   test(`${name}: a rolled back transaction leaves nothing behind`, () => {
     const db = setup();
     db.exec('BEGIN');
@@ -60,6 +83,37 @@ test('sql.js: knows when a transaction is open', () => {
   assert.equal(db.inTransaction(), true);
   db.exec('COMMIT');
   assert.equal(db.inTransaction(), false);
+});
+
+test('sql.js: statements keep working after the database is exported for saving', () => {
+  const raw = new SQL.Database();
+  const db = wrapSqlJs(raw);
+  db.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)');
+  const insert = db.prepare('INSERT INTO t (name) VALUES (?)');
+  const count = db.prepare('SELECT COUNT(*) AS c FROM t');
+  insert.run('before');
+  assert.equal(count.get()?.c, 1);
+  // Export frees every statement sql.js holds, the cached ones included.
+  const bytes = raw.export();
+  assert.ok(bytes.length > 0);
+  assert.equal(Number(insert.run('after').lastInsertRowid), 2);
+  assert.equal(count.get()?.c, 2);
+  // The saved copy is a real database holding what was there at the time.
+  const copy = new SQL.Database(bytes);
+  assert.equal(copy.exec('SELECT COUNT(*) FROM t')[0]?.values[0]?.[0], 1);
+  copy.close();
+});
+
+test('sql.js: many different statements do not grow the cache without end', () => {
+  const db = wrapSqlJs(new SQL.Database());
+  db.exec('CREATE TABLE t (x)');
+  for (let n = 1; n <= 450; n += 1) {
+    const marks = Array.from({ length: n }, () => '?').join(',');
+    const values = Array.from({ length: n }, (_, i) => i);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM t WHERE x IN (${marks})`).get(...values)?.c, 0);
+  }
+  // The earliest ones were evicted and freed, and can still be prepared again.
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM t WHERE x IN (?)').get(1)?.c, 0);
 });
 
 test('sql.js: writes are reported, reads are not', () => {

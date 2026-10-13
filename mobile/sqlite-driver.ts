@@ -20,6 +20,14 @@ const capFs: FileApi = {
       return null;
     }
   },
+  async exists(path) {
+    try {
+      await Filesystem.stat({ path, directory: Directory.Data });
+      return true;
+    } catch {
+      return false;
+    }
+  },
   async write(path, bytes) {
     await Filesystem.writeFile({ path, directory: Directory.Data, data: toBase64(bytes) });
   },

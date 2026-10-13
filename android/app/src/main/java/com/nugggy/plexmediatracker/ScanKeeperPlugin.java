@@ -32,6 +32,14 @@ public class ScanKeeperPlugin extends Plugin {
         }
     };
 
+    @Override
+    public void load() {
+        // Android ended the service (its daily allowance for this kind of work
+        // ran out). Tell the page, which stops the scan and saves.
+        // Ticks carry on so the scan can still reach its next stopping point.
+        ScanService.onTimedOut = () -> handler.post(() -> notifyListeners("timeout", new JSObject()));
+    }
+
     @PluginMethod
     public void start(PluginCall call) {
         // Android refuses to start a foreground service from the background in
@@ -41,8 +49,10 @@ public class ScanKeeperPlugin extends Plugin {
             Intent intent = new Intent(getContext(), ScanService.class)
                     .putExtra("title", call.getString("title"))
                     .putExtra("text", call.getString("text"));
+            ScanService.markStarting();
             getContext().startForegroundService(intent);
         } catch (RuntimeException e) {
+            ScanService.startFailed();
             call.reject("Could not start the background service: " + e.getMessage());
             return;
         }
@@ -71,7 +81,8 @@ public class ScanKeeperPlugin extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         ticking = false;
-        getContext().stopService(new Intent(getContext(), ScanService.class));
+        // Not stopService straight away: a start still on its way would crash the app.
+        ScanService.requestStop(getContext());
         call.resolve();
     }
 

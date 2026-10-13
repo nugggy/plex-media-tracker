@@ -34,7 +34,16 @@ function writeReason(err: unknown): string {
   return plainReason(err);
 }
 
-export async function exportLyrics(keys: string[]): Promise<ExportResult> {
+/** The disk, as exportLyrics sees it. Tests hand in their own so nothing reaches the NAS. */
+export interface LyricDisk {
+  canWrite: boolean;
+  fileExists(path: string): Promise<boolean>;
+  writeNewFile(path: string, text: string): Promise<void>;
+}
+
+const realDisk: LyricDisk = { canWrite: CAN_WRITE_LYRIC_FILES, fileExists, writeNewFile };
+
+export async function exportLyrics(keys: string[], disk: LyricDisk = realDisk): Promise<ExportResult> {
   const result: ExportResult = {
     saved: 0,
     alreadyThere: 0,
@@ -46,7 +55,7 @@ export async function exportLyrics(keys: string[]): Promise<ExportResult> {
   };
   beginLyricsJob('Looking up where your songs are kept');
   try {
-    if (!CAN_WRITE_LYRIC_FILES) throw new Error('Saving lyrics to Plex works from the desktop app only.');
+    if (!disk.canWrite) throw new Error('Saving lyrics to Plex works from the desktop app only.');
 
     const lyrics = keys
       .map((k) => getLyric(k))
@@ -72,13 +81,13 @@ export async function exportLyrics(keys: string[]): Promise<ExportResult> {
         result.unreachable += 1;
         continue;
       }
-      if ((await fileExists(sidecarPath(song, 'lrc'))) || (await fileExists(sidecarPath(song, 'txt')))) {
+      if ((await disk.fileExists(sidecarPath(song, 'lrc'))) || (await disk.fileExists(sidecarPath(song, 'txt')))) {
         result.alreadyThere += 1;
         continue;
       }
       const path = sidecarPath(song, lyric.synced ? 'lrc' : 'txt');
       try {
-        await writeNewFile(path, `${(lyric.synced ?? lyric.plain)!.trim()}\n`);
+        await disk.writeNewFile(path, `${(lyric.synced ?? lyric.plain)!.trim()}\n`);
         recordLyricFile(lyric.rating_key, path);
         result.saved += 1;
         if (track!.albumKey) albums.add(track!.albumKey);

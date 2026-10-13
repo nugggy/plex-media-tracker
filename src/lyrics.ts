@@ -9,6 +9,7 @@ import { db } from './db.ts';
 import { USER_AGENT } from './config.ts';
 import { normaliseArtistName } from './matching.ts';
 import { nowIso } from './dates.ts';
+import { createJob, type JobProgress } from './jobs.ts';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS lyrics (
@@ -23,12 +24,6 @@ CREATE TABLE IF NOT EXISTS lyrics (
   instrumental INTEGER NOT NULL DEFAULT 0,
   fetched_at   TEXT NOT NULL
 );
--- "We looked and LRCLIB has nothing" kept apart from "nobody has asked", with
--- when it was last asked.
-CREATE TABLE IF NOT EXISTS lyrics_misses (
-  rating_key TEXT PRIMARY KEY,
-  tried_at   TEXT NOT NULL
-);
 -- Every lyric file this app has written into the music library, so they can
 -- all be found and removed again if ever wanted.
 CREATE TABLE IF NOT EXISTS lyric_files (
@@ -37,6 +32,9 @@ CREATE TABLE IF NOT EXISTS lyric_files (
   written_at TEXT NOT NULL
 );`;
 db.exec(SCHEMA);
+// Misses used to be remembered so a track was not asked about again. Since
+// 1.9.3 every miss is asked again, so nothing read the table any more.
+db.exec('DROP TABLE IF EXISTS lyrics_misses');
 
 const LRCLIB = 'https://lrclib.net/api';
 /** LRCLIB matches on duration; this is how far out a search candidate may be. */
@@ -105,8 +103,10 @@ function durationGap(track: Track, c: LrcRecord): number | null {
 /**
  * The best search candidate, or none. The artist must match, and the duration
  * must be within tolerance, because a candidate ten seconds out is a different
- * recording and no lyric beats the wrong lyric. A track whose duration Plex
- * does not know can only be matched on the artist.
+ * recording and no lyric beats the wrong lyric. A candidate with no duration
+ * cannot be judged that way, so it is passed over whenever the track's own
+ * duration is known. A track whose duration Plex does not know can only be
+ * matched on the artist, and takes the first such candidate.
  */
 export function pickCandidate(track: Track, candidates: LrcRecord[]): LrcRecord | null {
   const artist = normaliseArtistName(track.artist);
@@ -114,9 +114,9 @@ export function pickCandidate(track: Track, candidates: LrcRecord[]): LrcRecord 
   for (const c of candidates) {
     if (normaliseArtistName(c.artistName ?? '') !== artist) continue;
     if (!fromLrclib(c)) continue;
+    if (track.duration_ms === null) return c;
     const gap = durationGap(track, c);
-    if (gap === null) return c;
-    if (gap > DURATION_TOLERANCE_S) continue;
+    if (gap === null || gap > DURATION_TOLERANCE_S) continue;
     if (!best || gap < best.gap) best = { c, gap };
   }
   return best?.c ?? null;
@@ -145,7 +145,6 @@ export function saveLyric(track: Track, lyric: StoredLyric, source: LyricSource)
     lyric.instrumental ? 1 : 0,
     nowIso(),
   );
-  db.prepare('DELETE FROM lyrics_misses WHERE rating_key = ?').run(track.rating_key);
 }
 
 export function recordLyricFile(ratingKey: string, path: string): void {
@@ -159,20 +158,6 @@ export function getLyric(ratingKey: string): LyricRow | undefined {
     | (Omit<LyricRow, 'instrumental'> & { instrumental: number })
     | undefined;
   return row ? { ...row, instrumental: row.instrumental === 1 } : undefined;
-}
-
-export function recordMiss(ratingKey: string, at: string = nowIso()): void {
-  db.prepare(
-    `INSERT INTO lyrics_misses (rating_key, tried_at) VALUES (?, ?)
-     ON CONFLICT(rating_key) DO UPDATE SET tried_at = excluded.tried_at`,
-  ).run(ratingKey, at);
-}
-
-export function lastMiss(ratingKey: string): string | undefined {
-  const row = db.prepare('SELECT tried_at FROM lyrics_misses WHERE rating_key = ?').get(ratingKey) as
-    | { tried_at: string }
-    | undefined;
-  return row?.tried_at;
 }
 
 /** Each track with what this app knows about it. Covered wins: Plex already has it. */
@@ -228,21 +213,19 @@ export interface FetchResult {
 
 /**
  * One lyrics job at a time, finding or saving to Plex, sharing one progress
- * object so the page polls a single place. `ok` is false when the job ended
- * badly, so the banner can turn red.
+ * object so the page polls a single place. See src/jobs.ts.
  */
-const progress = { running: false, message: '', ok: true };
-export const lyricsProgress = (): { running: boolean; message: string; ok: boolean } => ({ ...progress });
+const job = createJob();
+export const lyricsProgress = (): JobProgress => job.progress();
 
 export function beginLyricsJob(message: string): void {
-  if (progress.running) throw new Error('A lyrics job is already running.');
-  Object.assign(progress, { running: true, message, ok: true });
+  job.begin(message, 'A lyrics job is already running.');
 }
 export function lyricsJobMessage(message: string): void {
-  progress.message = message;
+  job.say(message);
 }
 export function endLyricsJob(message: string, ok: boolean): void {
-  Object.assign(progress, { running: false, message, ok });
+  job.end(message, ok);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -261,7 +244,7 @@ export async function fetchLyrics(tracks: Track[]): Promise<FetchResult> {
     const todo = trackStates(tracks).filter((t) => t.state === 'missing');
     for (let i = 0; i < todo.length; i += 1) {
       const track = todo[i]!;
-      progress.message = `Lyrics, ${i + 1} of ${todo.length}: ${track.title}`;
+      lyricsJobMessage(`Lyrics, ${i + 1} of ${todo.length}: ${track.title}`);
       try {
         const lyric = await lookupLyric(track);
         if (lyric) {
@@ -269,7 +252,6 @@ export async function fetchLyrics(tracks: Track[]): Promise<FetchResult> {
           if (lyric.instrumental) result.instrumental += 1;
           else result.found += 1;
         } else {
-          recordMiss(track.rating_key);
           result.missed += 1;
         }
       } catch {

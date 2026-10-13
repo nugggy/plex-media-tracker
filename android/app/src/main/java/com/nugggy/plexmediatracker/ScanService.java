@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
@@ -17,7 +18,46 @@ public class ScanService extends Service {
     static final int ID = 1;
     static volatile boolean running = false;
 
+    /** Told when Android ends the service because its daily time allowance ran out. */
+    static volatile Runnable onTimedOut = null;
+
+    /*
+     * Android crashes the app if a service started with startForegroundService
+     * is stopped before it calls startForeground. So a stop that arrives while
+     * a start is still on its way is held, and acted on once it lands.
+     */
+    private static final Object LOCK = new Object();
+    private static boolean starting = false;
+    private static boolean stopWhenStarted = false;
+
     private PowerManager.WakeLock lock;
+
+    /** Called by the plugin just before it asks Android to start the service. */
+    static void markStarting() {
+        synchronized (LOCK) {
+            starting = true;
+            stopWhenStarted = false;
+        }
+    }
+
+    /** Called by the plugin when Android refused the start, so none is on its way. */
+    static void startFailed() {
+        synchronized (LOCK) {
+            starting = false;
+            stopWhenStarted = false;
+        }
+    }
+
+    /** Stops the service now, or as soon as a start still on its way has landed. */
+    static void requestStop(Context ctx) {
+        synchronized (LOCK) {
+            if (starting) {
+                stopWhenStarted = true;
+                return;
+            }
+        }
+        ctx.stopService(new Intent(ctx, ScanService.class));
+    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -41,6 +81,17 @@ public class ScanService extends Service {
             startForeground(ID, n);
         }
 
+        boolean stopNow;
+        synchronized (LOCK) {
+            starting = false;
+            stopNow = stopWhenStarted;
+            stopWhenStarted = false;
+        }
+        if (stopNow) {
+            shutDown();
+            return START_NOT_STICKY;
+        }
+
         if (lock == null) {
             lock = getSystemService(PowerManager.class)
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pmt:scan");
@@ -51,12 +102,30 @@ public class ScanService extends Service {
         return START_NOT_STICKY;
     }
 
+    /**
+     * Android 15 and later allow a data sync service about six hours a day, then
+     * call this and expect it gone within seconds. Stop cleanly so the app is not
+     * killed, and let the scan know so it can stop and save what it has.
+     */
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        shutDown();
+        Runnable listener = onTimedOut;
+        if (listener != null) listener.run();
+    }
+
+    private void shutDown() {
+        running = false;
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        stopSelf();
+    }
+
     private Notification notification(String title, String text) {
         return build(this, title, text);
     }
 
     /** Also used by the plugin to change the text without restarting the service. */
-    static Notification build(android.content.Context ctx, String title, String text) {
+    static Notification build(Context ctx, String title, String text) {
         Intent open = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
         PendingIntent pi = PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(ctx, CHANNEL)

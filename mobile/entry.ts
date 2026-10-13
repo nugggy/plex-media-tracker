@@ -4,7 +4,7 @@
  * for the backend instead of going to the network. The backend itself loads
  * only once the database is open, because src/db.ts opens it on import.
  */
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { installFetchBridge, thumbLoader } from './bridge.ts';
 import { initMobileDatabase, flushDatabase } from './sqlite-driver.ts';
 import { LATEST_RELEASE_API, githubProblem, pickUpdate, updateFromTag, type Update } from './updates.ts';
@@ -15,6 +15,8 @@ interface ScanKeeperPlugin {
   update(o: { text: string }): Promise<void>;
   stop(): Promise<void>;
   requestBatteryExemption(): Promise<{ granted: boolean }>;
+  /** Android ended the background service because its daily time allowance ran out. */
+  addListener(event: 'timeout', fn: () => void): Promise<PluginListenerHandle>;
 }
 const ScanKeeper = registerPlugin<ScanKeeperPlugin>('ScanKeeper');
 
@@ -63,6 +65,13 @@ const backend = initMobileDatabase().then(async () => {
     void flushDatabase();
     ScanKeeper.stop().catch(() => {});
   };
+
+  // Without the service the scan would soon be paused off screen, so stop it
+  // now and keep what it has found.
+  void ScanKeeper.addListener('timeout', () => {
+    scanner.requestStop();
+    void flushDatabase();
+  });
 
   startBackgroundSync();
   return route;

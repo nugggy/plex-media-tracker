@@ -97,3 +97,53 @@ test('a refresh that cannot reach the server still reports what it holds', async
     store.db.exec(`DELETE FROM releases; DELETE FROM plex_albums; DELETE FROM local_episodes`);
   }
 });
+
+test('with the watchlist off, a clean run of the remaining parts still counts as full', async () => {
+  store.setSetting('last_refresh_at', '');
+  store.setSetting('watchlist_enabled', '0');
+  try {
+    await refreshLibraryState();
+    assert.ok(store.getSetting('last_refresh_at') > '2026');
+  } finally {
+    store.setSetting('watchlist_enabled', '1');
+  }
+});
+
+test('with the watchlist off, a holdings-only run counts as full too', async () => {
+  store.setSetting('last_refresh_at', '');
+  store.setSetting('watchlist_enabled', '0');
+  try {
+    await refreshLibraryState(undefined, ['holdings']);
+    assert.ok(store.getSetting('last_refresh_at') > '2026');
+  } finally {
+    store.setSetting('watchlist_enabled', '1');
+  }
+});
+
+test('a refresh told to stop does nothing more, says so, and is not remembered as done', async () => {
+  store.setSetting('last_refresh_at', '');
+  calls.length = 0;
+  const result = await refreshLibraryState(undefined, undefined, false, () => true);
+  assert.equal(result.stopped, true);
+  assert.deepEqual(calls, []);
+  assert.equal(store.getSetting('last_refresh_at'), '');
+});
+
+test('Stop pressed during a refresh ends it as stopped, not done', async () => {
+  const { runRefresh, requestStop, getProgress } = await import('../src/scanner.ts');
+  store.setSetting('plex_section', '1');
+  try {
+    const running = runRefresh();
+    assert.equal(getProgress().running, true);
+    requestStop();
+    const end = await running;
+    assert.equal(end.phase, 'stopped');
+    assert.equal(end.running, false);
+    assert.match(end.reason ?? '', /stopped before it finished/);
+    // The next run starts clean rather than stopping straight away.
+    const again = await runRefresh();
+    assert.equal(again.phase, 'done');
+  } finally {
+    store.setSetting('plex_section', '');
+  }
+});

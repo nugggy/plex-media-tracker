@@ -191,6 +191,23 @@ code {
   font-size: 12px;
   padding: 4px 9px;
 }
+/* On a touchscreen a small button is easy to miss, so every small button and
+   chip is at least a fingertip (44 px) square there. The rows they sit in are
+   allowed to wrap, so the bigger buttons still fit a phone-width card. */
+@media (pointer: coarse) {
+  .btn-tiny {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 6px 12px;
+  }
+  .chip {
+    min-height: 44px;
+  }
+  .card-actions,
+  .filter-summary {
+    flex-wrap: wrap;
+  }
+}
 
 /* ------------------------------------------------------------- progress */
 

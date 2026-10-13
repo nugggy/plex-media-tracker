@@ -85,6 +85,7 @@ export async function plexGet(
   token: string,
   path: string,
   params: Record<string, string> = {},
+  timeoutMs = 30_000,
 ): Promise<PlexContainer> {
   const url = new URL(cleanBaseUrl(baseUrl) + path);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -94,7 +95,7 @@ export async function plexGet(
   try {
     res = await fetch(url, {
       headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     const timedOut = (err as Error).name === 'TimeoutError';

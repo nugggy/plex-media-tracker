@@ -40,6 +40,23 @@ public class UpdaterPlugin extends Plugin {
     private static final String LATEST_PAGE =
             "https://github.com/nugggy/plex-media-tracker/releases/latest";
 
+    /** Far above any real build of the app, so only a wrong or broken file hits it. */
+    private static final long MAX_DOWNLOAD_BYTES = 200L * 1024 * 1024;
+
+    /**
+     * Any download still here is from an earlier launch: installed by now, or
+     * given up on. Either way it is only taking up space.
+     */
+    @Override
+    public void load() {
+        updateFile().delete();
+    }
+
+    /** Must sit in the cache folder that res/xml/file_paths.xml shares. */
+    private File updateFile() {
+        return new File(new File(getContext().getCacheDir(), "updates"), "update.apk");
+    }
+
     /**
      * The newest release's tag, read from where the public releases page
      * redirects. Done here rather than in the web view because the page has no
@@ -98,8 +115,9 @@ public class UpdaterPlugin extends Plugin {
             return;
         }
         new Thread(() -> {
+            File apk = updateFile();
             try {
-                File apk = download(url);
+                download(url, apk);
                 String problem = checkApk(apk);
                 if (problem != null) {
                     apk.delete();
@@ -114,15 +132,14 @@ public class UpdaterPlugin extends Plugin {
                 getActivity().startActivity(install);
                 call.resolve();
             } catch (Exception e) {
+                apk.delete();
                 call.reject("The download did not work. " + e.getMessage(), "DOWNLOAD_FAILED");
             }
         }).start();
     }
 
-    private File download(String url) throws Exception {
-        File dir = new File(getContext().getCacheDir(), "updates");
-        dir.mkdirs();
-        File out = new File(dir, "update.apk");
+    private void download(String url, File out) throws Exception {
+        out.getParentFile().mkdirs();
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         // GitHub answers with a redirect to its file store, also over https.
         c.setInstanceFollowRedirects(true);
@@ -134,14 +151,24 @@ public class UpdaterPlugin extends Plugin {
         }
         if (code == 404) throw new Exception("GitHub does not have that version's file. Check again in a few minutes.");
         if (code != 200) throw new Exception("GitHub answered HTTP " + code + ". Try again shortly.");
+        String tooBig = "The file is far bigger than this app should be, so it was not kept.";
+        if (c.getContentLengthLong() > MAX_DOWNLOAD_BYTES) {
+            c.disconnect();
+            throw new Exception(tooBig);
+        }
         try (InputStream in = c.getInputStream(); OutputStream os = new FileOutputStream(out)) {
             byte[] buf = new byte[64 * 1024];
+            long total = 0;
             int n;
-            while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+            while ((n = in.read(buf)) > 0) {
+                total += n;
+                // The size header can be missing or wrong, so count as well.
+                if (total > MAX_DOWNLOAD_BYTES) throw new Exception(tooBig);
+                os.write(buf, 0, n);
+            }
         } finally {
             c.disconnect();
         }
-        return out;
     }
 
     /** Null when the download is safe to offer, otherwise the reason it is not. */
@@ -155,7 +182,12 @@ public class UpdaterPlugin extends Plugin {
         PackageInfo current = pm.getPackageInfo(getContext().getPackageName(), flags);
         if (!current.packageName.equals(next.packageName)) return "The download is a different app.";
         if (versionOf(next) <= versionOf(current)) return "The download is not newer than this version.";
-        if (!Arrays.equals(signersOf(next), signersOf(current))) {
+        // Both sides must have signers: two missing lists would otherwise match.
+        Signature[] nextSigners = signersOf(next);
+        Signature[] currentSigners = signersOf(current);
+        if (nextSigners == null || nextSigners.length == 0
+                || currentSigners == null || currentSigners.length == 0
+                || !Arrays.equals(nextSigners, currentSigners)) {
             return "The download is not signed with this app's key.";
         }
         return null;

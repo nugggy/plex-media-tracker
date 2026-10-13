@@ -50,6 +50,7 @@ const progress: Progress = {
 };
 
 const NOT_CONFIGURED = 'Plex is not set up yet. Open Settings and add your server.';
+const STOPPED = 'Sync stopped before it finished. What it found so far has been kept.';
 
 /**
  * Each kind of run (a full check, the Artists check, each refresh button)
@@ -139,6 +140,7 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
           },
           undefined,
           true,
+          () => stopRequested,
         );
         watchlistNote = quick.watchlist?.blocked ?? quick.message;
         quickProblem = quick.problem;
@@ -243,9 +245,7 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
     Object.assign(progress, {
       running: false,
       phase: stopped ? 'stopped' : 'failed',
-      reason: stopped
-        ? 'Sync stopped before it finished. What it found so far has been kept.'
-        : plainReason(err),
+      reason: stopped ? STOPPED : plainReason(err),
       current: '',
       finishedAt: nowIso(),
       message,
@@ -267,7 +267,7 @@ export async function runScan(skipQuickRefresh = false): Promise<Progress> {
 
 /* ------------------------------------------------------ artist identity */
 
-async function identifyArtist(artist: ArtistRow): Promise<void> {
+export async function identifyArtist(artist: ArtistRow): Promise<void> {
   let candidates: MbCandidate[];
   try {
     candidates = await searchArtist(artist.name);
@@ -316,15 +316,19 @@ async function identifyArtist(artist: ArtistRow): Promise<void> {
 
 /* ----------------------------------------------------------- release check */
 
-function wantedTypes(settings: Record<string, string>): Set<string> {
+/**
+ * Albums and EPs only. Singles were dropped on purpose: the feeds are for
+ * records, films and shows, and a single is usually a track off an album that
+ * is coming anyway.
+ */
+export function wantedTypes(settings: Record<string, string>): Set<string> {
   const wanted = new Set<string>();
   if (settings.include_album === '1') wanted.add('album');
   if (settings.include_ep === '1') wanted.add('ep');
-  if (settings.include_single === '1') wanted.add('single');
   return wanted;
 }
 
-async function checkArtistReleases(artist: ArtistRow, wanted: Set<string>): Promise<number> {
+export async function checkArtistReleases(artist: ArtistRow, wanted: Set<string>): Promise<number> {
   if (!artist.mbid) return 0;
   const groups = await browseReleaseGroups(artist.mbid);
   const owned = store.ownedTitles(artist.plex_key);
@@ -341,6 +345,7 @@ async function checkArtistReleases(artist: ArtistRow, wanted: Set<string>): Prom
       primary_type: group.primaryType,
       secondary_types: group.secondaryTypes.length ? group.secondaryTypes.join(', ') : null,
       release_date: group.firstReleaseDate,
+      date_precision: group.datePrecision,
       owned: owned.has(norm),
     });
     if (isNew && !owned.has(norm) && isCurrent(group.firstReleaseDate)) newCount += 1;
@@ -348,9 +353,11 @@ async function checkArtistReleases(artist: ArtistRow, wanted: Set<string>): Prom
   return newCount;
 }
 
-function isWanted(group: MbReleaseGroup, wanted: Set<string>): boolean {
+export function isWanted(group: MbReleaseGroup, wanted: Set<string>): boolean {
   if (group.secondaryTypes.length > 0) return false; // live, compilation, remix, soundtrack
   const primary = (group.primaryType ?? '').toLowerCase();
+  // Never a single, whatever set is handed in. See wantedTypes.
+  if (primary === 'single') return false;
   return wanted.has(primary);
 }
 
@@ -380,6 +387,7 @@ export async function runRefresh(parts?: RefreshPart[], force = false): Promise<
     return getProgress();
   }
 
+  stopRequested = false;
   const kind = parts ? `refresh-${[...parts].sort().join('-')}` : 'refresh';
   Object.assign(progress, {
     running: true,
@@ -403,15 +411,17 @@ export async function runRefresh(parts?: RefreshPart[], force = false): Promise<
       },
       parts,
       force,
+      () => stopRequested,
     );
-    if (!result.problem) rememberDuration(kind);
+    // A stopped run did not do all its work, so its time says nothing about the next.
+    if (!result.problem && !result.stopped) rememberDuration(kind);
     Object.assign(progress, {
       running: false,
-      phase: result.problem ? 'failed' : 'done',
-      reason: result.problem,
+      phase: result.stopped ? 'stopped' : result.problem ? 'failed' : 'done',
+      reason: result.stopped ? STOPPED : result.problem,
       current: '',
       finishedAt: nowIso(),
-      message: result.message,
+      message: result.stopped ? `Refresh stopped. ${result.message}` : result.message,
     });
   } catch (err) {
     Object.assign(progress, {
@@ -423,6 +433,7 @@ export async function runRefresh(parts?: RefreshPart[], force = false): Promise<
       message: `Refresh failed: ${(err as Error).message}`,
     });
   } finally {
+    stopRequested = false;
     scanHooks.onEnd();
   }
   return getProgress();

@@ -14,7 +14,7 @@ import { searchArtist } from './musicbrainz.ts';
 import { trendingFromTmdb } from './tmdb.ts';
 import { findDiscoverMatch } from './search.ts';
 
-export type TrendingKind = 'movie' | 'show' | 'album' | 'single';
+export type TrendingKind = 'movie' | 'show' | 'album';
 
 export interface ChartRow {
   kind: TrendingKind;
@@ -36,7 +36,7 @@ interface AppleEntry {
   link?: { attributes?: { href?: string } } | { attributes?: { href?: string } }[];
 }
 
-/** Apple links an album with one object and a song with an array of them. */
+/** Apple links an album with one object, and has used an array of them elsewhere. */
 function firstHref(link: AppleEntry['link']): string | null {
   const one = Array.isArray(link) ? link[0] : link;
   return one?.attributes?.href ?? null;
@@ -59,7 +59,7 @@ function largestImage(images: { label?: string; attributes?: { height?: string }
   return largestHeight > 0 ? largest.label ?? null : images[images.length - 1]?.label ?? null;
 }
 
-export function parseAppleChart(raw: unknown, kind: 'album' | 'single'): ChartRow[] {
+export function parseAppleChart(raw: unknown, kind: 'album' = 'album'): ChartRow[] {
   const entries = (raw as { feed?: { entry?: AppleEntry[] } })?.feed?.entry;
   if (!Array.isArray(entries)) return [];
 
@@ -168,7 +168,7 @@ export interface LibraryArtist {
 }
 
 /**
- * A chart album or single is in the library when its resolved artist is a
+ * A chart album is in the library when its resolved artist is a
  * real Plex artist, not a manually watched one, and that artist has an album
  * whose normalised title matches the chart title's. This is deliberately
  * album-level rather than artist-level: see the "Already have it" section of
@@ -198,13 +198,13 @@ export function albumInLibrary(chartTitle: string, artist: LibraryArtist | null)
 const APPLE_CHART = (what: string) =>
   `https://itunes.apple.com/us/rss/${what}/limit=50/genre=6/json`;
 
-export async function trendingFromApple(kind: 'album' | 'single'): Promise<ChartRow[]> {
-  const res = await fetch(APPLE_CHART(kind === 'album' ? 'topalbums' : 'topsongs'), {
+export async function trendingFromApple(): Promise<ChartRow[]> {
+  const res = await fetch(APPLE_CHART('topalbums'), {
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error(`Apple returned HTTP ${res.status}`);
-  return parseAppleChart(await res.json(), kind);
+  return parseAppleChart(await res.json(), 'album');
 }
 
 /* ------------------------------------------------------------- storage */
@@ -240,6 +240,10 @@ CREATE TABLE IF NOT EXISTS trending_hidden (
   PRIMARY KEY (kind, id)
 );`;
 db.exec(SCHEMA);
+// The country singles chart was dropped along with singles everywhere else.
+// Cheap and harmless to repeat, so it simply runs on every start.
+db.exec("DELETE FROM trending_items WHERE kind = 'single'");
+db.exec("DELETE FROM trending_hidden WHERE kind = 'single'");
 
 /**
  * Hiding lives in its own table because trending_items is emptied and rewritten
@@ -299,7 +303,6 @@ export function builtAt(): Record<TrendingKind, string | null> {
     movie: null,
     show: null,
     album: null,
-    single: null,
   };
   for (const r of rows) out[r.kind] = r.at;
   return out;
@@ -411,8 +414,8 @@ export function listTrending(): TrendingRow[] {
 /* ----------------------------------------------------------------- build */
 
 /**
- * Assembles all four charts into one table: TMDB films and shows, then Apple
- * country albums and singles. Each chart is fetched and resolved inside its
+ * Assembles all three charts into one table: TMDB films and shows, then the
+ * Apple country albums chart. Each chart is fetched and resolved inside its
  * own try/catch so one failing service (TMDB down, Apple unreachable) cannot
  * empty the other charts; the failure is recorded in `notes` and reported in
  * the returned message instead.
@@ -433,7 +436,7 @@ export async function buildTrending(
   const rows: TrendingRow[] = [];
   // Only a kind that actually rebuilt this run gets deleted and replaced, so
   // a source that failed leaves the chart the user already had in place
-  // rather than the whole table being wiped whenever one of four
+  // rather than the whole table being wiped whenever one of three
   // independent sources has a bad night.
   const succeeded: TrendingKind[] = [];
   // Human-readable names of charts that did not refresh this run, for the
@@ -493,7 +496,7 @@ export async function buildTrending(
       } catch (err) {
         // trendingFromTmdb throws on any failed page rather than returning a
         // short chart, so catching here is the only error handling this
-        // chart needs: the failure is noted and the other three charts still
+        // chart needs: the failure is noted and the other two charts still
         // build.
         notes.push(`${kind}: ${(err as Error).message}`);
         stale.push(kind === 'movie' ? 'films' : 'shows');
@@ -504,36 +507,34 @@ export async function buildTrending(
     stale.push('films', 'shows');
   }
 
-  // Country music. No key needed.
-  for (const kind of ['album', 'single'] as const) {
-    onProgress?.(`Trending country ${kind}s`);
-    // Same reasoning as the film and show loop above: build locally and only
-    // merge into `rows` once the whole chart has resolved, so `rows` and
-    // `succeeded` cannot drift apart if resolveArtist or the fetch throws.
-    const built: TrendingRow[] = [];
-    try {
-      const chart = await trendingFromApple(kind);
-      for (let i = 0; i < chart.length; i += 1) {
-        const row = chart[i]!;
-        // Named per artist rather than just a counter: MusicBrainz allows one
-        // lookup a second, so a full chart of uncached artists is over a
-        // minute of otherwise silent waiting.
-        onProgress?.(`Matching artist ${i + 1} of ${chart.length}: ${row.subtitle}`);
-        built.push({
-          ...row,
-          rating_key: null,
-          guid: null,
-          mbid: await resolveArtist(row.subtitle),
-          tracked: false,
-          in_library: false,
-        });
-      }
-      rows.push(...built);
-      succeeded.push(kind);
-    } catch (err) {
-      notes.push(`country ${kind}s: ${(err as Error).message}`);
-      stale.push(kind === 'album' ? 'country albums' : 'country singles');
+  // Country albums. No key needed. Same reasoning as the film and show loop
+  // above: build locally and only merge into `rows` once the whole chart has
+  // resolved, so `rows` and `succeeded` cannot drift apart if resolveArtist
+  // or the fetch throws.
+  onProgress?.('Trending country albums');
+  const built: TrendingRow[] = [];
+  try {
+    const chart = await trendingFromApple();
+    for (let i = 0; i < chart.length; i += 1) {
+      const row = chart[i]!;
+      // Named per artist rather than just a counter: MusicBrainz allows one
+      // lookup a second, so a full chart of uncached artists is over a
+      // minute of otherwise silent waiting.
+      onProgress?.(`Matching artist ${i + 1} of ${chart.length}: ${row.subtitle}`);
+      built.push({
+        ...row,
+        rating_key: null,
+        guid: null,
+        mbid: await resolveArtist(row.subtitle),
+        tracked: false,
+        in_library: false,
+      });
     }
+    rows.push(...built);
+    succeeded.push('album');
+  } catch (err) {
+    notes.push(`country albums: ${(err as Error).message}`);
+    stale.push('country albums');
   }
 
   saveTrending(rows, succeeded);

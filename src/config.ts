@@ -1,6 +1,6 @@
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdirSync, existsSync, renameSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, existsSync, renameSync, readFileSync } from 'node:fs';
 
 import { APP_VERSION } from './version.ts';
 
@@ -28,6 +28,17 @@ function legacyDataDir(): string | null {
   if (localAppData) return join(localAppData, LEGACY_FOLDER);
   const home = join(homedir(), '.wax-wrangler');
   return home;
+}
+
+/**
+ * A test file that forgets to choose its own folder must never reach the real
+ * database. On 13/10/2026 a test run upgraded the live one in place. The test
+ * runner marks each file's process with NODE_TEST_CONTEXT, so those processes
+ * fall back to a throwaway folder of their own, which also stops parallel
+ * files fighting over one database lock.
+ */
+if (process.env.NODE_TEST_CONTEXT && !(process.env.PLEX_TRACKER_DATA_DIR ?? process.env.WAX_WRANGLER_DATA_DIR)) {
+  process.env.PLEX_TRACKER_DATA_DIR = mkdtempSync(join(tmpdir(), 'pmt-test-'));
 }
 
 export const DATA_DIR =
