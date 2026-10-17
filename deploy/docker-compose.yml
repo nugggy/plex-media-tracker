@@ -1,8 +1,8 @@
 # Plex Media Tracker on the QNAP. Paste this into Container Station as a new
 # Application. Before the first start, put the Caddyfile beside it in
-# /share/Container/plex-media-tracker/ and change the public name on the next
+# /share/Container/plex-media-tracker/ and check the public name on the next
 # line. Both containers read it from there.
-x-public-name: &public-name CHANGE-ME.duckdns.org
+x-public-name: &public-name nuggy.myqnapcloud.com
 
 services:
   app:

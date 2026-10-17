@@ -14,7 +14,8 @@ Two containers run together:
 
 ## What you need
 
-- A public name for your home connection, such as `yourname.duckdns.org`. Your
+- A public name for your home connection. This NAS uses its myQNAPcloud name,
+  `nuggy.myqnapcloud.com`, which already points at the static IP. Another option is `yourname.duckdns.org`. Your
   Telstra static IP never changes, so the name only has to be set once. DuckDNS
   is free: sign in at <https://www.duckdns.org>, add a subdomain, and set its
   address to your static IP. A domain you already own works just as well, with
