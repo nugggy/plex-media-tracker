@@ -47,6 +47,7 @@
     </div>
 
     <div id="banner" class="banner" role="status" aria-live="polite" hidden></div>
+    <div id="offline-note" class="banner info" role="status" aria-live="polite" hidden></div>
 
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button class="tab is-active" data-tab="out" data-label="Out now" role="tab" id="tab-out" aria-controls="panel-out" aria-selected="true" tabindex="0">
@@ -531,6 +532,36 @@
       <section id="panel-settings" class="panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
         <p id="settings-unsaved" class="notice" role="status" hidden></p>
         <form id="settings-form" class="form" novalidate>
+          <fieldset id="account-section" hidden>
+            <legend>Account</legend>
+            <p class="muted small" id="account-text"></p>
+            <label class="field" id="phone-server-field" hidden>
+              <span>Server address</span>
+              <span class="row">
+                <input
+                  class="input"
+                  id="phone-server"
+                  type="url"
+                  inputmode="url"
+                  spellcheck="false"
+                  autocapitalize="off"
+                />
+                <button type="button" class="btn btn-tiny" id="phone-server-save">Change</button>
+              </span>
+              <small class="muted">Changing it signs this phone out, ready to sign in to the new address.</small>
+            </label>
+            <div id="session-block" hidden>
+              <p class="muted small">
+                Everything signed in to this server. Sign out anything you do not recognise.
+              </p>
+              <ul id="session-list" class="session-list"></ul>
+            </div>
+            <div class="row wrap">
+              <button type="button" class="btn" id="signout-btn">Sign out</button>
+              <button type="button" class="btn btn-quiet" id="signout-all-btn">Sign out everywhere</button>
+            </div>
+          </fieldset>
+
           <fieldset data-section="plex">
             <legend>Plex server</legend>
 
@@ -725,6 +756,33 @@
         </section>
       </section>
     </main>
+
+    <div id="signin" class="signin" hidden>
+      <div class="signin-card" role="dialog" aria-modal="true" aria-labelledby="signin-title">
+        <svg class="disc" viewBox="0 0 40 40" aria-hidden="true">
+          <rect width="40" height="40" rx="9" fill="var(--bg)" />
+          <rect x="0.5" y="0.5" width="39" height="39" rx="8.5" fill="none" stroke="var(--line)" />
+          <path d="M15 11l13 9-13 9z" fill="var(--accent)" />
+        </svg>
+        <h2 id="signin-title">Plex Media Tracker</h2>
+        <p id="signin-text" class="muted"></p>
+        <label class="field" id="signin-server-field" hidden>
+          <span>Server address</span>
+          <input
+            class="input"
+            id="signin-server"
+            type="url"
+            inputmode="url"
+            placeholder="https://music.example.org"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="url"
+          />
+        </label>
+        <button type="button" id="signin-btn" class="btn btn-primary">Sign in with Plex</button>
+        <p id="signin-status" class="small signin-status" role="status" aria-live="polite"></p>
+      </div>
+    </div>
 
     <script type="module" src="/app.js"></script>
   </body>

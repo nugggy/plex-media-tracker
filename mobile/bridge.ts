@@ -1,47 +1,30 @@
-type Handle = (
-  method: string,
-  url: URL,
-  body: string,
-) => Promise<{ status: number; headers: Record<string, string>; body: Uint8Array }>;
+type Handle = (method: string, url: URL, body: string | null, contentType: string | null) => Promise<Response>;
 
 function isApp(url: URL, origin: string): boolean {
   return url.origin === origin && (url.pathname.startsWith('/api/') || url.pathname === '/thumb');
 }
 
 /**
- * The dashboard calls /api/... exactly as it does on the PC. Here those calls
- * never leave the app: they go straight to the router. Everything else goes
- * out through Capacitor's native HTTP, with a timer of our own, because the
- * native layer does not promise to honour an AbortSignal.
+ * A fetch with a timer of its own, because Capacitor's native HTTP does not
+ * promise to honour an AbortSignal. The caller's own signal still counts.
  */
-export function installFetchBridge(
-  win: { fetch: typeof fetch; location: { origin: string } },
-  handle: Handle,
-  opts: { timeoutMs?: number } = {},
-): void {
-  const real = win.fetch.bind(win);
-  const timeoutMs = opts.timeoutMs ?? 60_000;
-
-  win.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const href = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
-    const url = new URL(href, win.location.origin);
-    if (isApp(url, win.location.origin)) {
-      const body = typeof init.body === 'string' ? init.body : '';
-      const r = await handle((init.method ?? 'GET').toUpperCase(), url, body);
-      const bytes = r.body.length ? (r.body as Uint8Array<ArrayBuffer>) : null;
-      return new Response(bytes, { status: r.status, headers: r.headers });
-    }
-
+export function withTimeout(real: typeof fetch, timeoutMs: number): typeof fetch {
+  return (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const host = (() => {
+      try {
+        return new URL(typeof input === 'string' || input instanceof URL ? String(input) : input.url).host;
+      } catch {
+        return 'the server';
+      }
+    })();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let onAbort: (() => void) | undefined;
     const giveUp = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        const e = new Error(`No answer from ${url.host} in ${timeoutMs / 1000} s`);
+        const e = new Error(`No answer from ${host} in ${timeoutMs / 1000} s`);
         e.name = 'TimeoutError';
         reject(e);
       }, timeoutMs);
-      // The caller's own AbortSignal.timeout still counts, even if the native
-      // layer ignores it.
       const signal = init.signal;
       if (signal) {
         onAbort = () => reject(signal.reason ?? new Error('Aborted'));
@@ -55,6 +38,31 @@ export function installFetchBridge(
       clearTimeout(timer);
       if (onAbort) init.signal?.removeEventListener('abort', onAbort);
     }
+  }) as typeof fetch;
+}
+
+/**
+ * The dashboard calls /api/... exactly as it does on the PC. On the phone
+ * those calls are handed to `handle`, which sends them on to the NAS.
+ * Everything else (the update check on GitHub) goes out through Capacitor's
+ * native HTTP, with the timer above.
+ */
+export function installFetchBridge(
+  win: { fetch: typeof fetch; location: { origin: string } },
+  handle: Handle,
+  opts: { timeoutMs?: number } = {},
+): void {
+  const outside = withTimeout(win.fetch.bind(win), opts.timeoutMs ?? 60_000);
+
+  win.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const href = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
+    const url = new URL(href, win.location.origin);
+    if (isApp(url, win.location.origin)) {
+      const body = typeof init.body === 'string' ? init.body : null;
+      const type = new Headers(init.headers).get('Content-Type');
+      return handle((init.method ?? 'GET').toUpperCase(), url, body, type);
+    }
+    return outside(input, init);
   }) as typeof fetch;
 }
 

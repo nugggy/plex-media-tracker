@@ -1,24 +1,15 @@
 /**
  * The phone app's start-up. Loaded before public/app.js, it puts the fetch
- * bridge in place first, synchronously, so the dashboard's first calls wait
- * for the backend instead of going to the network. The backend itself loads
- * only once the database is open, because src/db.ts opens it on import.
+ * bridge in place first, synchronously, so the dashboard's first calls go to
+ * the NAS rather than to the app's own file server. The phone keeps no
+ * library of its own: the NAS holds everything, and the phone keeps a copy of
+ * the last answers for when the NAS cannot be reached.
  */
-import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
-import { installFetchBridge, thumbLoader } from './bridge.ts';
-import { initMobileDatabase, flushDatabase } from './sqlite-driver.ts';
+import { registerPlugin } from '@capacitor/core';
+import { installFetchBridge, thumbLoader, withTimeout } from './bridge.ts';
+import { browserCache, createClient, localStore, type ConnectionStatus } from './client.ts';
 import { LATEST_RELEASE_API, githubProblem, pickUpdate, updateFromTag, type Update } from './updates.ts';
 import { APP_VERSION } from '../src/version.ts';
-
-interface ScanKeeperPlugin {
-  start(o: { title: string; text: string }): Promise<void>;
-  update(o: { text: string }): Promise<void>;
-  stop(): Promise<void>;
-  requestBatteryExemption(): Promise<{ granted: boolean }>;
-  /** Android ended the background service because its daily time allowance ran out. */
-  addListener(event: 'timeout', fn: () => void): Promise<PluginListenerHandle>;
-}
-const ScanKeeper = registerPlugin<ScanKeeperPlugin>('ScanKeeper');
 
 interface UpdaterPlugin {
   canInstall(): Promise<{ allowed: boolean }>;
@@ -28,61 +19,45 @@ interface UpdaterPlugin {
 }
 const Updater = registerPlugin<UpdaterPlugin>('Updater');
 
-function askOnceForBatteryExemption(): void {
-  try {
-    if (localStorage.getItem('asked-battery') === '1') return;
-    localStorage.setItem('asked-battery', '1');
-  } catch {
-    // Without storage we would ask every time, so do not ask at all.
-    return;
-  }
-  void ScanKeeper.requestBatteryExemption();
+interface LinksPlugin {
+  openPlexSignIn(o: { url: string }): Promise<void>;
 }
+const Links = registerPlugin<LinksPlugin>('Links');
 
-const backend = initMobileDatabase().then(async () => {
-  const [{ route }, { startBackgroundSync }, scanner] = await Promise.all([
-    import('../src/route.ts'),
-    import('../src/startup.ts'),
-    import('../src/scanner.ts'),
-  ]);
+// Captured before the bridge replaces window.fetch. Long enough never to cut
+// short a call that sets its own, shorter timeout.
+const network = withTimeout(window.fetch.bind(window), 60_000);
 
-  let poll: ReturnType<typeof setInterval> | null = null;
-  scanner.scanHooks.onStart = () => {
-    // If Android will not start the service, the check still runs, only
-    // without protection from being paused while the app is off screen.
-    ScanKeeper.start({ title: 'Plex Media Tracker', text: 'Checking for updates' }).catch((err) =>
-      console.warn('Background service not started:', err),
-    );
-    askOnceForBatteryExemption();
-    poll = setInterval(() => {
-      const p = scanner.getProgress();
-      ScanKeeper.update({ text: p.current || p.message || 'Checking for updates' }).catch(() => {});
-    }, 5000);
-  };
-  scanner.scanHooks.onEnd = () => {
-    if (poll) clearInterval(poll);
-    poll = null;
-    void flushDatabase();
-    ScanKeeper.stop().catch(() => {});
-  };
-
-  // Without the service the scan would soon be paused off screen, so stop it
-  // now and keep what it has found.
-  void ScanKeeper.addListener('timeout', () => {
-    scanner.requestStop();
-    void flushDatabase();
-  });
-
-  startBackgroundSync();
-  return route;
+const client = createClient({
+  fetch: network,
+  store: localStore(),
+  cache: browserCache(),
+  onStatus: (detail: ConnectionStatus) =>
+    window.dispatchEvent(new CustomEvent('pmt:connection', { detail })),
 });
 
-// Long enough never to cut short a call that sets its own, shorter timeout.
-installFetchBridge(window, async (method, url, body) => (await backend)(method, url, body), {
-  timeoutMs: 90_000,
+installFetchBridge(window, (method, url, body, type) =>
+  client.request(method, url.pathname + url.search, body, type),
+);
+
+// Coming back to the app may mean it has left home, so the public address is
+// tried first again rather than a home address that will not answer.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') client.preferPublic();
 });
+
 (window as unknown as { pmtThumbLoader: (src: string) => Promise<string> }).pmtThumbLoader =
   thumbLoader(window.fetch);
+
+/** What the page needs to set up and sign in to the server. */
+(window as unknown as { pmtClient: unknown }).pmtClient = {
+  serverUrl: () => client.serverUrl(),
+  setServer: (raw: string) => client.setServer(raw),
+  setLanUrl: (url: string | null) => client.setLanUrl(url),
+  hasToken: () => client.hasToken(),
+  setToken: (token: string | null) => client.setToken(token),
+  openSignIn: (url: string) => Links.openPlexSignIn({ url }),
+};
 
 /**
  * The Settings page's Check for updates button. It asks GitHub for the latest

@@ -1,6 +1,5 @@
 import { openDatabase } from './sqlite-driver.ts';
 import type { Db } from './sqlite.ts';
-import { PLATFORM } from './config.ts';
 import { today, daysAgo, nowIso } from './dates.ts';
 
 export type MbStatus = 'pending' | 'resolved' | 'ambiguous' | 'not_found' | 'manual' | 'error';
@@ -190,6 +189,16 @@ CREATE TABLE IF NOT EXISTS scans (
   message      TEXT
 );
 
+-- Who is signed in to the NAS server. Only a hash of each session's secret
+-- is kept, so a copy of this file cannot be used to sign in.
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash   TEXT PRIMARY KEY,
+  account      TEXT NOT NULL,
+  device       TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+
 -- Data fixes that must happen exactly once, by name.
 CREATE TABLE IF NOT EXISTS migrations (
   name   TEXT PRIMARY KEY,
@@ -267,8 +276,7 @@ const DEFAULTS: Record<string, string> = {
   plex_url: '',
   plex_token: '',
   /** 'manual' uses plex_url as typed; 'auto' finds the server via plex.tv each check. */
-  // A typed LAN address is no use to a phone away from home.
-  plex_connection: PLATFORM === 'mobile' ? 'auto' : 'manual',
+  plex_connection: 'manual',
   /** local, remote or relay: how the last automatic lookup reached the server. */
   plex_connection_kind: '',
   plex_section: '',

@@ -1,0 +1,13 @@
+# HTTPS in front of Plex Media Tracker. Caddy fetches a Let's Encrypt
+# certificate for the name in PMT_DOMAIN and renews it on its own. The
+# certificate check comes in on port 443, which the modem forwards here.
+{$PMT_DOMAIN} {
+	encode gzip
+	reverse_proxy app:7000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+}

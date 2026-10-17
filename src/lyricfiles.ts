@@ -1,7 +1,6 @@
 /**
  * Reading and writing lyric files on the NAS. The only module that touches
- * the music library's folders. The phone build swaps in mobile/lyricfiles.ts,
- * since a phone cannot reach the NAS's shared folders.
+ * the music library's folders.
  */
 import { access, writeFile } from 'node:fs/promises';
 

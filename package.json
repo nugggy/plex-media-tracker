@@ -1,9 +1,9 @@
 {
   "name": "plex-media-tracker",
-  "version": "1.10.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Tracks new music releases from your Plex library artists, plus films and shows on your Plex watchlist.",
+  "description": "Tracks new music releases from your Plex library artists, plus films and shows on your Plex watchlist. Runs on a NAS, with an Android app that shows the same library.",
   "scripts": {
     "start": "node src/server.ts",
     "scan": "node src/scan-cli.ts",
@@ -14,7 +14,6 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
     "@types/node": "^24.3.0",
-    "@types/sql.js": "^1.4.11",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.2"
   },
@@ -23,8 +22,6 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
-    "@capacitor/core": "^8.5.2",
-    "@capacitor/filesystem": "^8.1.3",
-    "sql.js": "^1.14.2"
+    "@capacitor/core": "^8.5.2"
   }
 }

@@ -1,0 +1,44 @@
+# Plex Media Tracker on the QNAP. Paste this into Container Station as a new
+# Application. Before the first start, put the Caddyfile beside it in
+# /share/Container/plex-media-tracker/ and change the public name on the next
+# line. Both containers read it from there.
+x-public-name: &public-name CHANGE-ME.duckdns.org
+
+services:
+  app:
+    image: ghcr.io/nugggy/plex-media-tracker:latest
+    container_name: plex-media-tracker
+    restart: unless-stopped
+    environment:
+      TZ: Australia/Sydney
+      # Caddy sits in front for everything from outside, so its headers are believed.
+      PLEX_TRACKER_TRUST_PROXY: "1"
+      # The music share is mounted under here, so lyric files are written straight to disk.
+      PLEX_TRACKER_MEDIA_ROOT: /media
+      # Offered to the phone for when it is at home and the modem will not loop
+      # the public address back inside.
+      PLEX_TRACKER_LAN_URL: http://192.168.0.162:7000
+      # The server answers to this name and the home address, nothing else.
+      PLEX_TRACKER_PUBLIC_HOST: *public-name
+    ports:
+      # Home network only. The modem must NOT forward this port.
+      - "7000:7000"
+    volumes:
+      - /share/Container/plex-media-tracker/data:/data
+      - "/share/CACHEDEV1_DATA/Nuggy NAS Shared Folder:/media/Nuggy NAS Shared Folder"
+
+  caddy:
+    image: caddy:2
+    container_name: plex-media-tracker-https
+    restart: unless-stopped
+    environment:
+      # Caddy gets and renews the certificate for this name itself.
+      PMT_DOMAIN: *public-name
+    ports:
+      # The modem forwards outside port 443 to this port on the NAS.
+      - "7443:443"
+    volumes:
+      - /share/Container/plex-media-tracker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /share/Container/plex-media-tracker/caddy:/data
+    depends_on:
+      - app

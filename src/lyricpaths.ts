@@ -44,6 +44,18 @@ export function toSharePath(plexFile: string, plexUrl: string): string | null {
   return `\\\\${host}\\${m[1]}\\${m[2]!.replace(/\//g, '\\')}`;
 }
 
+/**
+ * The same song as a path on this machine's own disk, for the NAS container,
+ * where each shared folder is mounted under root by its share name. Plex runs
+ * on the same NAS, so no network is involved.
+ */
+export function toLocalPath(plexFile: string, root: string): string | null {
+  if (climbsOut(plexFile)) return null;
+  const m = plexFile.match(QNAP_PATH);
+  if (!m) return null;
+  return `${root.replace(/\/+$/, '')}/${m[1]}/${m[2]}`;
+}
+
 /** The song's own path and name with the extension swapped, which is how Plex pairs them. */
 export function sidecarPath(songPath: string, extension: 'lrc' | 'txt'): string {
   const dot = songPath.lastIndexOf('.');

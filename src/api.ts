@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as store from './db.ts';
-import { PLATFORM, restartNeeded } from './config.ts';
+import { AUTH_REQUIRED, restartNeeded } from './config.ts';
 import { APP_VERSION, RELEASES_URL } from './version.ts';
 import * as wl from './watchlist-db.ts';
 import { getProgress, requestStop, runScan, runRefresh } from './scanner.ts';
@@ -91,7 +91,7 @@ function trackList(raw: unknown): Track[] {
   return out;
 }
 
-function send(res: ServerResponse, status: number, body: unknown): void {
+export function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -99,8 +99,7 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  // Plain bytes rather than Node buffers, so this also runs in the phone's web view.
+export async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Uint8Array[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -756,7 +755,10 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
 
   /* ---------------------------------------------------------- settings */
   'GET /api/settings': async (req, res, url) => {
-    const settings = store.getSettings();
+    // The sign-in bookkeeping is the server's own business, not a setting.
+    const settings = Object.fromEntries(
+      Object.entries(store.getSettings()).filter(([key]) => !key.startsWith('auth_')),
+    );
     send(res, 200, {
       settings: {
         ...settings,
@@ -764,7 +766,8 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
         tmdb_api_key: settings.tmdb_api_key ? '********' : '',
       },
       token_set: Boolean(settings.plex_token),
-      platform: PLATFORM,
+      // 'server' on the NAS, where the phone and every browser share one library.
+      platform: AUTH_REQUIRED ? 'server' : 'desktop',
       version: APP_VERSION,
       releases_url: RELEASES_URL,
     });
@@ -1047,9 +1050,19 @@ async function proxyThumb(
       res.writeHead(404).end();
       return;
     }
+    // Served from the app's own address, so only plain pictures get through.
+    // An SVG (Wikimedia hosts user-made ones) or a page could carry script.
+    const type = (upstream.headers.get('content-type') ?? 'image/jpeg').split(';')[0]!.trim().toLowerCase();
+    if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) {
+      res.writeHead(404).end();
+      return;
+    }
     res.writeHead(200, {
-      'Content-Type': upstream.headers.get('content-type') ?? 'image/jpeg',
-      'Cache-Control': 'public, max-age=86400',
+      'Content-Type': type,
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': 'sandbox',
+      // Private: on the NAS a picture is only handed out after signing in.
+      'Cache-Control': 'private, max-age=86400',
     });
     res.end(new Uint8Array(await upstream.arrayBuffer()));
   } catch {

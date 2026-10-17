@@ -1,5 +1,6 @@
-import { isConfigured, getSetting } from './db.ts';
-import { runRefresh } from './scanner.ts';
+import { isConfigured, getSetting, setSetting } from './db.ts';
+import { getProgress, runRefresh, runScan } from './scanner.ts';
+import { nowIso } from './dates.ts';
 import { maybeAutoBuildTrending } from './trendingauto.ts';
 
 /**
@@ -8,6 +9,9 @@ import { maybeAutoBuildTrending } from './trendingauto.ts';
  * change by the hour.
  */
 export const SYNC_ON_START_GAP_MS = 2 * 3_600_000;
+
+/** How often a long-running server asks whether a sync is due. */
+export const SYNC_CHECK_EVERY_MS = 15 * 60_000;
 
 /** True unless a full refresh finished cleanly within the gap. */
 export function syncDueOnStart(lastRefreshAt: string, now: number = Date.now()): boolean {
@@ -33,5 +37,42 @@ export function startBackgroundSync(): boolean {
   maybeAutoBuildTrending();
   if (!syncDueOnStart(getSetting('last_refresh_at'))) return false;
   void runRefresh();
+  return true;
+}
+
+/** The NAS's music scan runs in this Sydney hour, when nobody is waiting on it. */
+export const NIGHTLY_SCAN_HOUR = 3;
+
+function sydneyHour(at: number): number {
+  const text = new Intl.DateTimeFormat('en-AU', {
+    timeZone: 'Australia/Sydney',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(at));
+  return Number(text);
+}
+
+/**
+ * True in the small hours, Sydney time, when the last nightly scan was not
+ * started within the last 20 hours. The gap is short of a day so that a scan
+ * started a little late one night does not push the next one back a night.
+ */
+export function nightlyScanDue(lastStartedAt: string, now: number = Date.now()): boolean {
+  if (sydneyHour(now) !== NIGHTLY_SCAN_HOUR) return false;
+  const last = Date.parse(lastStartedAt);
+  return Number.isNaN(last) || now - last > 20 * 3_600_000;
+}
+
+/**
+ * On the NAS, a full check (the quick refresh and then MusicBrainz) once a
+ * night, standing in for the scheduled task the PC used. The MusicBrainz part
+ * only asks about artists not checked in the last week, so most nights are
+ * short.
+ */
+export function maybeNightlyScan(now: number = Date.now()): boolean {
+  if (!isConfigured() || getProgress().running) return false;
+  if (!nightlyScanDue(getSetting('last_nightly_scan_at'), now)) return false;
+  setSetting('last_nightly_scan_at', nowIso());
+  void runScan();
   return true;
 }

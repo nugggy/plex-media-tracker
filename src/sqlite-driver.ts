@@ -40,7 +40,7 @@ export function retryWhileLocked<T>(
   }
 }
 
-/** The PC driver. The phone build swaps this whole file for mobile/sqlite-driver.ts. */
+/** Opens the database file, waiting out another process's lock. */
 export function openNodeDatabase(path: string): Db {
   // Another process (a command-line scan, a test) may hold the write lock for
   // a moment. Wait up to five seconds for it instead of failing at once.

@@ -9,7 +9,8 @@ import * as store from './db.ts';
 import { getLyric, beginLyricsJob, lyricsJobMessage, endLyricsJob, recordLyricFile } from './lyrics.ts';
 import { fetchTrackFiles, refreshMetadata } from './plex.ts';
 import { withPlex } from './plexconnect.ts';
-import { toSharePath, sidecarPath } from './lyricpaths.ts';
+import { toSharePath, toLocalPath, sidecarPath } from './lyricpaths.ts';
+import { MEDIA_ROOT } from './config.ts';
 import { CAN_WRITE_LYRIC_FILES, fileExists, writeNewFile } from './lyricfiles.ts';
 import { plainReason } from './plainerror.ts';
 
@@ -26,10 +27,14 @@ export interface ExportResult {
 function writeReason(err: unknown): string {
   const code = (err as NodeJS.ErrnoException).code;
   if (code === 'EACCES' || code === 'EPERM') {
-    return 'This PC is not allowed to write to the music folder on the NAS. Check the shared folder permissions for your Windows account.';
+    return MEDIA_ROOT
+      ? 'The app is not allowed to write to the music folder. Check the folder is mounted read-write into the container.'
+      : 'This PC is not allowed to write to the music folder on the NAS. Check the shared folder permissions for your Windows account.';
   }
   if (code === 'ENOENT' || code === 'ENOTFOUND' || code === 'EHOSTUNREACH' || code === 'ETIMEDOUT') {
-    return 'This PC could not open the music folder on the NAS. Check that the NAS is on and you are on the home network.';
+    return MEDIA_ROOT
+      ? 'The music folder is not mounted into the container. Check the volumes in the compose file.'
+      : 'This PC could not open the music folder on the NAS. Check that the NAS is on and you are on the home network.';
   }
   return plainReason(err);
 }
@@ -76,7 +81,11 @@ export async function exportLyrics(keys: string[], disk: LyricDisk = realDisk): 
         result.inPlex += 1;
         continue;
       }
-      const song = track ? toSharePath(track.file, plexUrl) : null;
+      const song = !track
+        ? null
+        : MEDIA_ROOT
+          ? toLocalPath(track.file, MEDIA_ROOT)
+          : toSharePath(track.file, plexUrl);
       if (!song) {
         result.unreachable += 1;
         continue;

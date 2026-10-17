@@ -7,6 +7,7 @@
 
 import { $, $$ } from './lib/dom.js';
 import { resumeIfRunning } from './lib/api.js';
+import { whenSignedIn, wireSignIn } from './lib/signin.js';
 import { state } from './lib/state.js';
 import { loadArtists } from './views/artists.js';
 import { loadDash, stopNowPlaying } from './views/dash.js';
@@ -150,13 +151,46 @@ phoneWidth.addEventListener('change', () => {
 });
 $$('.subtabs').forEach((list) => wireTabKeys(list, '.subtab', (t) => t.dataset.sub));
 
+/* --------------------------------------------------------------- offline */
+
+/**
+ * The phone says when the NAS stopped answering and the page is showing the
+ * copy it saved last time, and when the NAS is back. A browser never sends
+ * these, since it has nothing saved to fall back on.
+ */
+const savedAtText = (iso) =>
+  new Date(iso).toLocaleString('en-AU', {
+    timeZone: 'Australia/Sydney',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    day: 'numeric',
+    month: 'short',
+  });
+
+window.addEventListener('pmt:connection', (e) => {
+  const note = $('#offline-note');
+  const { offline, savedAt } = e.detail ?? {};
+  if (!offline) {
+    note.hidden = true;
+    return;
+  }
+  note.textContent = savedAt
+    ? `Your server cannot be reached. Showing what was saved at ${savedAtText(savedAt)}.`
+    : 'Your server cannot be reached right now.';
+  note.hidden = false;
+});
+
 /* ------------------------------------------------------------------ boot */
 
-wireRefreshButtons();
-buildFilterBar('out');
-buildFilterBar('upcoming');
-showTab('out');
-refreshState();
-// Read Coming soon now as well, so its badge counts what the tab will show
-// before it is ever opened.
-prefetchFeed('upcoming');
+wireSignIn();
+if (await whenSignedIn()) {
+  wireRefreshButtons();
+  buildFilterBar('out');
+  buildFilterBar('upcoming');
+  showTab('out');
+  refreshState();
+  // Read Coming soon now as well, so its badge counts what the tab will show
+  // before it is ever opened.
+  prefetchFeed('upcoming');
+}

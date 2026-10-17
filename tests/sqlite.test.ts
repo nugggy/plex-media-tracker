@@ -1,15 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import initSqlJs from 'sql.js';
 import { openNodeDatabase, retryWhileLocked } from '../src/sqlite-driver.ts';
-import { wrapSqlJs } from '../src/sqlite-wasm.ts';
 import type { Db } from '../src/sqlite.ts';
-
-const SQL = await initSqlJs();
 
 const drivers: [string, () => Db][] = [
   ['node:sqlite', () => openNodeDatabase(':memory:')],
-  ['sql.js', () => wrapSqlJs(new SQL.Database())],
 ];
 
 for (const [name, open] of drivers) {
@@ -74,59 +69,6 @@ for (const [name, open] of drivers) {
     assert.equal(db.prepare('SELECT COUNT(*) AS c FROM t').get()?.c, 0);
   });
 }
-
-test('sql.js: knows when a transaction is open', () => {
-  const db = wrapSqlJs(new SQL.Database());
-  db.exec('CREATE TABLE t (x)');
-  assert.equal(db.inTransaction(), false);
-  db.exec('BEGIN');
-  assert.equal(db.inTransaction(), true);
-  db.exec('COMMIT');
-  assert.equal(db.inTransaction(), false);
-});
-
-test('sql.js: statements keep working after the database is exported for saving', () => {
-  const raw = new SQL.Database();
-  const db = wrapSqlJs(raw);
-  db.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)');
-  const insert = db.prepare('INSERT INTO t (name) VALUES (?)');
-  const count = db.prepare('SELECT COUNT(*) AS c FROM t');
-  insert.run('before');
-  assert.equal(count.get()?.c, 1);
-  // Export frees every statement sql.js holds, the cached ones included.
-  const bytes = raw.export();
-  assert.ok(bytes.length > 0);
-  assert.equal(Number(insert.run('after').lastInsertRowid), 2);
-  assert.equal(count.get()?.c, 2);
-  // The saved copy is a real database holding what was there at the time.
-  const copy = new SQL.Database(bytes);
-  assert.equal(copy.exec('SELECT COUNT(*) FROM t')[0]?.values[0]?.[0], 1);
-  copy.close();
-});
-
-test('sql.js: many different statements do not grow the cache without end', () => {
-  const db = wrapSqlJs(new SQL.Database());
-  db.exec('CREATE TABLE t (x)');
-  for (let n = 1; n <= 450; n += 1) {
-    const marks = Array.from({ length: n }, () => '?').join(',');
-    const values = Array.from({ length: n }, (_, i) => i);
-    assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM t WHERE x IN (${marks})`).get(...values)?.c, 0);
-  }
-  // The earliest ones were evicted and freed, and can still be prepared again.
-  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM t WHERE x IN (?)').get(1)?.c, 0);
-});
-
-test('sql.js: writes are reported, reads are not', () => {
-  let writes = 0;
-  const db = wrapSqlJs(new SQL.Database(), () => (writes += 1));
-  db.exec('CREATE TABLE t (x)');
-  db.prepare('INSERT INTO t VALUES (?)').run(1);
-  const before = writes;
-  db.prepare('SELECT * FROM t').all();
-  db.prepare('SELECT * FROM t').get();
-  assert.equal(writes, before);
-  assert.ok(before >= 2);
-});
 
 /*
  * Switching a fresh database to WAL needs an exclusive lock, and when two

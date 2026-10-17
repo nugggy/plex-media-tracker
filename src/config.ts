@@ -6,8 +6,6 @@ import { APP_VERSION } from './version.ts';
 
 export { APP_VERSION };
 export const APP_NAME = 'Plex Media Tracker';
-/** The phone build swaps this file for mobile/config.ts, where this is 'mobile'. */
-export const PLATFORM: 'desktop' | 'mobile' = 'desktop';
 
 /** The folder this app used before it was renamed. Its data is carried over. */
 const LEGACY_FOLDER = 'WaxWrangler';
@@ -46,6 +44,68 @@ export const DATA_DIR =
 
 export const DB_PATH = join(DATA_DIR, 'plex-media-tracker.db');
 export const PORT = Number(process.env.PLEX_TRACKER_PORT ?? process.env.WAX_WRANGLER_PORT ?? 7000);
+
+/**
+ * Where the server listens. Loopback on a PC, so nothing else can reach it.
+ * The NAS container sets 0.0.0.0, since the phone and other browsers need in.
+ */
+export const HOST = process.env.PLEX_TRACKER_HOST ?? '127.0.0.1';
+
+export function isLoopback(host: string): boolean {
+  return /^(127\.\d+\.\d+\.\d+|localhost|::1)$/.test(host);
+}
+
+/**
+ * Whether every visitor has to sign in with Plex. A server that only this
+ * machine can reach needs no sign-in; one that listens on the network always
+ * does, unless PLEX_TRACKER_AUTH=off says otherwise.
+ */
+export const AUTH_REQUIRED =
+  (process.env.PLEX_TRACKER_AUTH ?? (isLoopback(HOST) ? 'off' : 'plex')) !== 'off';
+
+/**
+ * True when a reverse proxy (Caddy, in the NAS setup) sits in front and its
+ * X-Forwarded-Proto and X-Forwarded-For headers can be believed.
+ */
+export const TRUST_PROXY = process.env.PLEX_TRACKER_TRUST_PROXY === '1';
+
+/**
+ * Where the NAS's shared folders are mounted inside the container, so lyric
+ * files can be written straight to disk instead of over the network. Empty on
+ * a PC, which reaches the same folders over SMB.
+ */
+export const MEDIA_ROOT = process.env.PLEX_TRACKER_MEDIA_ROOT ?? '';
+
+/** The server's address on the home network, offered to the phone as a second way in. */
+export const LAN_URL = process.env.PLEX_TRACKER_LAN_URL ?? '';
+
+/** The public name the proxy answers to, such as yourname.duckdns.org. */
+export const PUBLIC_HOST = (process.env.PLEX_TRACKER_PUBLIC_HOST ?? '').trim().toLowerCase();
+
+/**
+ * The names the NAS server answers to: its public name, its home address and
+ * loopback (for the container's health check). Anything else is a web page
+ * that has pointed its own name at the NAS (DNS rebinding) and is refused.
+ * Empty when neither name is set, and then any name is accepted.
+ */
+export function allowedHosts(): Set<string> {
+  const out = new Set<string>();
+  if (PUBLIC_HOST) {
+    out.add(PUBLIC_HOST);
+    out.add(`${PUBLIC_HOST}:443`);
+  }
+  if (LAN_URL) {
+    try {
+      out.add(new URL(LAN_URL).host.toLowerCase());
+    } catch {
+      // A malformed address names nothing.
+    }
+  }
+  if (out.size === 0) return out;
+  out.add(`localhost:${PORT}`);
+  out.add(`127.0.0.1:${PORT}`);
+  return out;
+}
 
 export const USER_AGENT = `PlexMediaTracker/${APP_VERSION} ( local personal use )`;
 

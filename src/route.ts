@@ -1,7 +1,6 @@
 /**
- * The API without an HTTP server. The PC's server.ts and the phone's fetch
- * bridge both end up in handleApi; this gives the phone a way in that needs no
- * socket, by handing handleApi a request and response that only hold bytes.
+ * The API without an HTTP server, for the tests. It hands handleApi a request
+ * and response that only hold bytes, so a route can be called without a socket.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { handleApi } from './api.ts';

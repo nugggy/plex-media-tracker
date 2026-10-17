@@ -5,6 +5,7 @@
 import { $, banner, el, safeHref } from '../lib/dom.js';
 import { api, post } from '../lib/api.js';
 import { refreshState } from './status.js';
+import { authStatus, signOut } from '../lib/signin.js';
 
 /* -------------------------------------------------------------- settings */
 
@@ -19,12 +20,14 @@ export async function loadSettings() {
     const updater = window.pmtUpdater;
     $('#update-row').hidden = !updater;
     $('#android-link').hidden = Boolean(updater);
-    $('#android-link').textContent =
-      platform === 'mobile' ? 'Check for a newer version' : 'Get the Android app';
-    $('#app-version').textContent =
-      platform === 'mobile'
-        ? `This is version ${version}.`
-        : `The Android app runs on its own on your phone, with its own library and scans. This is version ${version}.`;
+    const onPhone = Boolean(updater);
+    $('#android-link').textContent = onPhone ? 'Check for a newer version' : 'Get the Android app';
+    $('#app-version').textContent = onPhone
+      ? `This is version ${version} of the app.`
+      : platform === 'server'
+        ? `The Android app shows this same library from your NAS, so anything done on the phone shows here too. This is version ${version}.`
+        : `The Android app works with the server on your NAS, not with this PC. This is version ${version}.`;
+    void fillAccount();
 
     // A section with unsaved edits keeps them. Coming back to the tab reads
     // the settings again, and that must not quietly undo what was typed.
@@ -51,6 +54,112 @@ export async function loadSettings() {
     banner(err.message);
   }
 }
+
+/* --------------------------------------------------------------- account */
+
+async function fillAccount() {
+  const client = window.pmtClient;
+  const status = await authStatus();
+  const section = $('#account-section');
+  section.hidden = !client && !status.required;
+  if (section.hidden) return;
+  const where = client?.serverUrl() ?? location.host;
+  $('#account-text').textContent = status.account
+    ? `Signed in to ${where} as ${status.account}.`
+    : status.error
+      ? `Could not reach ${where} just now.`
+      : `Connected to ${where}.`;
+  $('#phone-server-field').hidden = !client;
+  if (client && document.activeElement !== $('#phone-server')) $('#phone-server').value = client.serverUrl() ?? '';
+  $('#signout-btn').hidden = !status.account;
+  $('#signout-all-btn').hidden = !status.account;
+  $('#session-block').hidden = !status.account;
+  if (status.account) await fillSessions();
+}
+
+const when = (iso) =>
+  new Date(iso).toLocaleString('en-AU', {
+    timeZone: 'Australia/Sydney',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+
+async function fillSessions() {
+  let sessions;
+  try {
+    ({ sessions } = await api('/api/auth/sessions'));
+  } catch {
+    $('#session-block').hidden = true;
+    return;
+  }
+  $('#session-list').replaceChildren(
+    ...sessions.map((s) =>
+      el(
+        'li',
+        { class: 'session-row' },
+        el(
+          'span',
+          {},
+          el('strong', {}, s.device === 'phone' ? 'Phone' : 'Browser'),
+          ` · ${s.account} · signed in ${when(s.created_at)} · last used ${when(s.last_seen_at)}`,
+        ),
+        s.current
+          ? el('span', { class: 'muted small' }, 'This one')
+          : el(
+              'button',
+              {
+                type: 'button',
+                class: 'btn btn-tiny',
+                onclick: async () => {
+                  try {
+                    await post('/api/auth/sessions/end', { id: s.id });
+                  } catch (err) {
+                    banner(err.message);
+                  }
+                  await fillSessions();
+                },
+              },
+              'Sign out',
+            ),
+      ),
+    ),
+  );
+}
+
+let signOutAllArmed = false;
+
+function wireAccount() {
+  $('#signout-btn').addEventListener('click', () => signOut(false));
+  // Every browser and phone has to sign in again after this, so it takes two presses.
+  $('#signout-all-btn').addEventListener('click', () => {
+    if (!signOutAllArmed) {
+      signOutAllArmed = true;
+      $('#signout-all-btn').textContent = 'Press again to sign out every device';
+      setTimeout(() => {
+        signOutAllArmed = false;
+        $('#signout-all-btn').textContent = 'Sign out everywhere';
+      }, 5000);
+      return;
+    }
+    void signOut(true);
+  });
+  $('#phone-server-save').addEventListener('click', () => {
+    const client = window.pmtClient;
+    if (!client) return;
+    try {
+      const before = client.serverUrl();
+      if (client.setServer($('#phone-server').value) !== before) location.reload();
+    } catch (err) {
+      banner(err.message);
+    }
+  });
+}
+
+wireAccount();
 
 function fillPlex(settings, tokenSet) {
   $('#plex_url').value = settings.plex_url;

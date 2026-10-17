@@ -2,11 +2,12 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PORT, DB_PATH, APP_NAME } from './config.ts';
+import { PORT, HOST, DB_PATH, APP_NAME, AUTH_REQUIRED, allowedHosts, isLoopback } from './config.ts';
 import { handleApi } from './api.ts';
 import { refuseRequest } from './origin.ts';
 import { isConfigured } from './db.ts';
-import { startBackgroundSync } from './startup.ts';
+import { maybeNightlyScan, startBackgroundSync, SYNC_CHECK_EVERY_MS } from './startup.ts';
+import { handleAuth, isOpenPath, refuseUnsigned, sessionOf, usesBearer } from './authroutes.ts';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 
@@ -20,17 +21,37 @@ const MIME: Record<string, string> = {
   '.json': 'application/json; charset=utf-8',
 };
 
+const HOSTS = allowedHosts();
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
 
-  // Checked here rather than in handleApi, since the phone reaches handleApi
+  // Checked here rather than in handleApi, since the tests reach handleApi
   // through route.ts with no headers at all.
   if (url.pathname.startsWith('/api/') || url.pathname === '/thumb') {
-    const refused = refuseRequest(req.method, req.headers, PORT);
+    const refused = refuseRequest(req.method, req.headers, PORT, {
+      signedIn: AUTH_REQUIRED,
+      bearer: usesBearer(req),
+      hosts: HOSTS,
+    });
     if (refused) {
       res
         .writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
         .end(JSON.stringify({ error: refused }));
+      return;
+    }
+    // On the NAS every call needs a session, apart from the few that sign in.
+    // Checked before anything else answers, the sign-in endpoints included.
+    if (AUTH_REQUIRED && !isOpenPath(url.pathname) && !sessionOf(req)) {
+      refuseUnsigned(res);
+      return;
+    }
+    try {
+      if (await handleAuth(req, res, url)) return;
+    } catch (err) {
+      res
+        .writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify({ error: (err as Error).message }));
       return;
     }
   }
@@ -60,12 +81,21 @@ const server = createServer(async (req, res) => {
   }
 });
 
-// Bind to loopback only. This is a personal tool, not a network service.
-server.listen(PORT, '127.0.0.1', () => {
+// Loopback only on a PC. The NAS container listens on the network, and then
+// every call needs a session.
+if (!isLoopback(HOST) && !AUTH_REQUIRED) {
+  process.stderr.write(
+    `\nRefusing to listen on ${HOST} with sign-in turned off: anyone on the network could change settings.\n\n`,
+  );
+  process.exit(1);
+}
+
+server.listen(PORT, HOST, () => {
   const banner = [
     '',
     `  ${APP_NAME}`,
-    `  Dashboard   http://localhost:${PORT}`,
+    `  Dashboard   http://${isLoopback(HOST) ? 'localhost' : HOST}:${PORT}`,
+    `  Sign-in     ${AUTH_REQUIRED ? 'with Plex, owner only' : 'not needed, this machine only'}`,
     `  Database    ${DB_PATH}`,
     isConfigured()
       ? '  Plex        configured'
@@ -77,6 +107,14 @@ server.listen(PORT, '127.0.0.1', () => {
   if (startBackgroundSync()) {
     process.stdout.write('  Syncing watchlist, episodes and library in the background\n\n');
   }
+  // A PC is closed and reopened, so the sync on start keeps it current. The
+  // NAS runs for weeks, so it looks again every so often, with the same
+  // two-hour gap deciding whether anything is due, and runs the full check
+  // overnight.
+  setInterval(() => {
+    if (AUTH_REQUIRED && maybeNightlyScan()) return;
+    startBackgroundSync();
+  }, SYNC_CHECK_EVERY_MS).unref();
 });
 
 server.on('error', (err: NodeJS.ErrnoException) => {

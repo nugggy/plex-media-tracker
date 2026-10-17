@@ -6,20 +6,27 @@ function fakeWin(real: typeof fetch) {
   return { fetch: real, location: { origin: 'https://localhost' } };
 }
 
-test('API calls go to the in-app router, not the network', async () => {
+test('API calls go to the handler that talks to the server, with their body and type', async () => {
   let network = 0;
   const win = fakeWin((async () => {
     network += 1;
     return new Response('');
   }) as typeof fetch);
-  installFetchBridge(win, async (method, url, body) => ({
-    status: 201,
+  installFetchBridge(win, async (method, url, body, type) =>
+    Response.json({ method, path: url.pathname, body, type }, { status: 201 }),
+  );
+  const r = await win.fetch('/api/settings', {
+    method: 'POST',
+    body: '{"a":1}',
     headers: { 'Content-Type': 'application/json' },
-    body: new TextEncoder().encode(JSON.stringify({ method, path: url.pathname, body })),
-  }));
-  const r = await win.fetch('/api/settings', { method: 'POST', body: '{"a":1}' });
+  });
   assert.equal(r.status, 201);
-  assert.deepEqual(await r.json(), { method: 'POST', path: '/api/settings', body: '{"a":1}' });
+  assert.deepEqual(await r.json(), {
+    method: 'POST',
+    path: '/api/settings',
+    body: '{"a":1}',
+    type: 'application/json',
+  });
   assert.equal(network, 0);
 });
 
@@ -30,7 +37,7 @@ test('thumbnail requests also stay inside the app', async () => {
   }) as typeof fetch);
   installFetchBridge(win, async (_m, url) => {
     routed = url.pathname + url.search;
-    return { status: 200, headers: { 'Content-Type': 'image/jpeg' }, body: new Uint8Array([1, 2]) };
+    return new Response(new Uint8Array([1, 2]), { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
   });
   const r = await win.fetch('/thumb?key=42');
   assert.equal(routed, '/thumb?key=42');

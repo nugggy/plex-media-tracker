@@ -6,6 +6,10 @@
 export async function api(path, options) {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
   const body = await res.json().catch(() => ({}));
+  // The server wants a session this page does not have. signin.js listens.
+  if (res.status === 401 && body.signin) {
+    window.dispatchEvent(new CustomEvent('pmt:signin-needed', { detail: { setup: Boolean(body.setup) } }));
+  }
   if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
   return body;
 }

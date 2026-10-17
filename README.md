@@ -2,11 +2,23 @@
 
 Tracks what is out and what is coming for the things you care about: new records
 from the artists in your Plex music library, and films and episodes from your
-Plex watchlist. Runs entirely on this PC.
+Plex watchlist.
 
-## Getting started
+It runs as a container on the NAS, beside Plex, and holds the one copy of
+everything. The dashboard opens in any browser, and the Android app shows the
+same library, so whatever you do on the phone shows on the desktop page too.
+Everyone signs in with the Plex account that owns the server. Setting it up is
+covered in [docs/nas-setup.md](docs/nas-setup.md).
 
-You need Node 24 or newer. Check with `node --version`.
+The phone keeps a copy of the last thing it loaded from each tab, so when the
+NAS cannot be reached it still shows those lists, with a note saying when they
+were saved. Changes need the NAS, and the app says so rather than losing them.
+
+## Getting started on a PC
+
+It still runs on a PC on its own, for trying changes out. That copy has its own
+database and needs no sign-in, because only that PC can reach it. You need
+Node 24 or newer. Check with `node --version`.
 
 1. Double-click `start-plex-media-tracker.cmd`. It opens <http://localhost:7000>.
 2. Go to Settings, add your Plex server URL and token, press Test connection,
@@ -228,7 +240,8 @@ deliberately outside this OneDrive folder. OneDrive syncing a database file
 while it is being written corrupts it.
 
 To move it, set `PLEX_TRACKER_DATA_DIR`. For a different port, set
-`PLEX_TRACKER_PORT`.
+`PLEX_TRACKER_PORT`. On the NAS it is in
+`/share/Container/plex-media-tracker/data`.
 
 Dates are compared in Australia/Sydney, not UTC, so something released today
 reads as released today rather than as upcoming until mid-morning. The page
@@ -251,7 +264,10 @@ npm run typecheck
 
 | File | Does |
 | --- | --- |
-| `src/server.ts` | HTTP server, static files, startup sync |
+| `src/server.ts` | HTTP server, static files, startup and periodic sync |
+| `src/auth.ts` | Sign in with Plex, and sessions, for the NAS server |
+| `src/authroutes.ts` | The sign-in endpoints and the session check |
+| `mobile/client.ts` | The phone's link to the NAS, and its offline copy |
 | `src/api.ts` | JSON endpoints and the unified feed |
 | `src/scanner.ts` | The music scan and the quick refresh, with shared progress |
 | `src/plex.ts` | The local Plex server |
@@ -274,9 +290,10 @@ npm run typecheck
 
 The designs are written up in `docs/specs/`.
 
-The server binds to `127.0.0.1` only, so it is not reachable from other machines
-on your network. Neither your Plex token nor your TMDB key is ever sent to the
-browser. All artwork, including the Trending charts', is proxied through the
+On a PC the server binds to `127.0.0.1` only, so it is not reachable from other
+machines on your network. In the NAS container it listens on the network, and
+then every call except signing in needs a session (`src/auth.ts`). Neither your
+Plex token nor your TMDB key is ever sent to the browser or the phone. All artwork, including the Trending charts', is proxied through the
 server too, so the browser never contacts Plex, Apple or TMDB directly.
 
 ## Known rough edges

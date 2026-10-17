@@ -66,3 +66,60 @@ test('the Host check follows the configured port', () => {
   assert.equal(refuseRequest('GET', { host: 'localhost:7123' }, 7123), null);
   assert.ok(refuseRequest('GET', { host: 'localhost:7000' }, 7123));
 });
+
+test('on the NAS any host name will do, since every call needs a session', () => {
+  const opts = { signedIn: true };
+  assert.equal(refuseRequest('GET', { host: 'pmt.example.org' }, PORT, opts), null);
+  assert.equal(
+    refuseRequest(
+      'POST',
+      { host: 'pmt.example.org', origin: 'https://pmt.example.org', 'content-type': JSON_TYPE },
+      PORT,
+      opts,
+    ),
+    null,
+  );
+  assert.equal(
+    refuseRequest(
+      'POST',
+      { host: '192.168.0.162:7000', origin: 'http://192.168.0.162:7000', 'content-type': JSON_TYPE },
+      PORT,
+      opts,
+    ),
+    null,
+  );
+});
+
+test('on the NAS a browser POST from another site is still refused', () => {
+  assert.ok(
+    refuseRequest(
+      'POST',
+      { host: 'pmt.example.org', origin: 'https://evil.example', 'content-type': JSON_TYPE },
+      PORT,
+      { signedIn: true },
+    ),
+  );
+});
+
+test("the phone's bearer requests come from its own web view and are let through", () => {
+  assert.equal(
+    refuseRequest(
+      'POST',
+      { host: 'pmt.example.org', origin: 'https://localhost', 'content-type': JSON_TYPE },
+      PORT,
+      { signedIn: true, bearer: true },
+    ),
+    null,
+  );
+});
+
+test('on the NAS, once its names are known, a rebound name is refused', () => {
+  const hosts = new Set(['music.example.org', 'music.example.org:443', '192.168.0.162:7000', '127.0.0.1:7000']);
+  const opts = { signedIn: true, hosts };
+  assert.equal(refuseRequest('GET', { host: 'music.example.org' }, PORT, opts), null);
+  assert.equal(refuseRequest('GET', { host: '192.168.0.162:7000' }, PORT, opts), null);
+  assert.ok(refuseRequest('GET', { host: 'attacker.example:7000' }, PORT, opts));
+  assert.ok(
+    refuseRequest('POST', { host: 'attacker.example:7000', 'content-type': JSON_TYPE }, PORT, opts),
+  );
+});

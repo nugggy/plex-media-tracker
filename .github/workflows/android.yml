@@ -2,6 +2,8 @@ name: Android release
 
 # Builds a signed APK and attaches it to a GitHub release whenever a version
 # tag such as v1.2.0 is pushed. The signing key comes from repository secrets.
+# Once the APK is out, the server image for the NAS is built and pushed to
+# GitHub's container registry under the same version, and as latest.
 on:
   push:
     tags: ['v*']
@@ -71,3 +73,34 @@ jobs:
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: plex-media-tracker-*.apk
+
+  image:
+    # Only after the APK job has typechecked, tested and released.
+    needs: apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Name the image
+        id: names
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          # The TS-464 has an Intel processor.
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/nugggy/plex-media-tracker:${{ steps.names.outputs.version }}
+            ghcr.io/nugggy/plex-media-tracker:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.names.outputs.version }}

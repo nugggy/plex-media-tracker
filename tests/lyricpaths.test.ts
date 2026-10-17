@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nasHost, toSharePath, sidecarPath, climbsOut } from '../src/lyricpaths.ts';
+import { nasHost, toSharePath, toLocalPath, sidecarPath, climbsOut } from '../src/lyricpaths.ts';
 
 const SONG = '/share/CACHEDEV1_DATA/Nuggy NAS Shared Folder/PLEX Library/Music/Kryptonite.mp3';
 
@@ -45,4 +45,13 @@ test('dots inside a name are not mistaken for climbing out', () => {
   assert.equal(climbsOut('/share/Music/./song.mp3'), false);
   assert.equal(climbsOut('/share/Music/../song.mp3'), true);
   assert.equal(climbsOut(String.raw`\\nas\Music\..\song.mp3`), true);
+});
+
+test('in the NAS container a song is found under the mounted share, by its share name', () => {
+  assert.equal(
+    toLocalPath(SONG, '/media/'),
+    '/media/Nuggy NAS Shared Folder/PLEX Library/Music/Kryptonite.mp3',
+  );
+  assert.equal(toLocalPath('/share/CACHEDEV1_DATA/Music/../../etc/passwd', '/media'), null);
+  assert.equal(toLocalPath('/music/song.mp3', '/media'), null);
 });

@@ -1,6 +1,6 @@
 /**
- * The slice of SQLite the app uses. The PC runs it on node:sqlite, the phone
- * on sql.js, and nothing outside the two drivers knows which.
+ * The slice of SQLite the app uses, run on node:sqlite. Kept as an interface
+ * so nothing outside sqlite-driver.ts depends on the driver itself.
  */
 export type SqlValue = string | number | bigint | null | Uint8Array;
 
