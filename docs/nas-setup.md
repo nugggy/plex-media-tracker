@@ -110,6 +110,12 @@ server.
   than an hour old.
 - The full check, including MusicBrainz, once a night in the 3 am hour, Sydney
   time.
+- A copy of the database once a day, in `dataackups`, named by date. The
+  newest 14 are kept. The storage pool has no free space for snapshots, so this
+  stands in for them. To go back to one, stop the app, replace
+  `plex-media-tracker.db` with the copy, delete the `-wal` and `-shm` files
+  beside it, and start the app again. The copies sit on the same disks, so they
+  do not cover the NAS itself failing.
 
 ## If something goes wrong
 

@@ -7,6 +7,7 @@ import { handleApi } from './api.ts';
 import { refuseRequest } from './origin.ts';
 import { isConfigured } from './db.ts';
 import { maybeNightlyScan, startBackgroundSync, SYNC_CHECK_EVERY_MS } from './startup.ts';
+import { runDailyBackup } from './backup.ts';
 import { handleAuth, isOpenPath, refuseUnsigned, sessionOf, usesBearer } from './authroutes.ts';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -107,6 +108,8 @@ server.listen(PORT, HOST, () => {
   ].join('\n');
   process.stdout.write(`${banner}\n`);
 
+  // A copy of the database once a day, before anything else writes to it.
+  runDailyBackup();
   if (startBackgroundSync()) {
     process.stdout.write('  Syncing watchlist, episodes and library in the background\n\n');
   }
@@ -115,6 +118,7 @@ server.listen(PORT, HOST, () => {
   // two-hour gap deciding whether anything is due, and runs the full check
   // overnight.
   setInterval(() => {
+    runDailyBackup();
     if (AUTH_REQUIRED && maybeNightlyScan()) return;
     startBackgroundSync();
   }, SYNC_CHECK_EVERY_MS).unref();
