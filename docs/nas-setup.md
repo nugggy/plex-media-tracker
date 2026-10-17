@@ -95,10 +95,13 @@ in, with a button to sign out any one you do not recognise.
 
 ## Updating
 
-Each release builds a new image. In Container Station, open the
-`plex-media-tracker` application and choose to recreate it, or pull the
-`latest` image again and restart the container. The database lives in the
-`data` folder, so nothing is lost.
+Each release builds a new image. In Container Station, open Applications, then
+the actions menu beside `plex-media-tracker`, and choose Recreate, then Update.
+The compose file says `pull_policy: always`, so this fetches the newest image.
+The database lives in the `data` folder, so nothing is lost.
+
+Update the NAS before the phone, since a newer phone app may expect the newer
+server.
 
 ## What runs by itself
 

@@ -8,6 +8,8 @@ services:
   app:
     image: ghcr.io/nugggy/plex-media-tracker:latest
     container_name: plex-media-tracker
+    # Recreate fetches the newest image, so updating is one click.
+    pull_policy: always
     restart: unless-stopped
     environment:
       TZ: Australia/Sydney
