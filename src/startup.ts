@@ -1,6 +1,7 @@
 import { isConfigured, getSetting, setSetting } from './db.ts';
 import { getProgress, runRefresh, runScan } from './scanner.ts';
 import { nowIso } from './dates.ts';
+import { AUTH_REQUIRED } from './config.ts';
 import { maybeAutoBuildTrending } from './trendingauto.ts';
 
 /**
@@ -10,23 +11,38 @@ import { maybeAutoBuildTrending } from './trendingauto.ts';
  */
 export const SYNC_ON_START_GAP_MS = 2 * 3_600_000;
 
+/**
+ * The NAS is always on and nothing else prompts it, so it refreshes hourly:
+ * a film added to the watchlist or an episode that has just aired shows
+ * within the hour. The quick refresh never touches MusicBrainz, so this costs
+ * a couple of minutes of Plex and plex.tv calls an hour.
+ */
+export const SERVER_REFRESH_GAP_MS = 3_600_000;
+
+/** The gap that applies here: hourly on the NAS, two hours on a PC. */
+export const REFRESH_GAP_MS = AUTH_REQUIRED ? SERVER_REFRESH_GAP_MS : SYNC_ON_START_GAP_MS;
+
 /** How often a long-running server asks whether a sync is due. */
 export const SYNC_CHECK_EVERY_MS = 15 * 60_000;
 
 /** True unless a full refresh finished cleanly within the gap. */
-export function syncDueOnStart(lastRefreshAt: string, now: number = Date.now()): boolean {
+export function syncDueOnStart(
+  lastRefreshAt: string,
+  now: number = Date.now(),
+  gapMs: number = SYNC_ON_START_GAP_MS,
+): boolean {
   const finished = Date.parse(lastRefreshAt);
   if (Number.isNaN(finished)) return true;
   const age = now - finished;
   // A negative age means the clock moved; trust nothing and sync.
-  return age < 0 || age > SYNC_ON_START_GAP_MS;
+  return age < 0 || age > gapMs;
 }
 
 /**
  * Catches up on the watchlist, episodes and library on start, so the
  * dashboard is current the moment it opens. The slow MusicBrainz scan is
  * deliberately left for the Scan button. Trending charts more than a week old
- * are rebuilt too. Shared by the PC server and the phone.
+ * are rebuilt too. On the NAS the server also calls this every 15 minutes.
  */
 export function startBackgroundSync(): boolean {
   if (!isConfigured() || getSetting('sync_on_start') !== '1') return false;
@@ -35,7 +51,7 @@ export function startBackgroundSync(): boolean {
   // Turning off sync on start turns this off too; opening the Trending tab
   // still catches the charts up.
   maybeAutoBuildTrending();
-  if (!syncDueOnStart(getSetting('last_refresh_at'))) return false;
+  if (!syncDueOnStart(getSetting('last_refresh_at'), Date.now(), REFRESH_GAP_MS)) return false;
   void runRefresh();
   return true;
 }

@@ -105,8 +105,9 @@ server.
 
 ## What runs by itself
 
-- The quick refresh (Plex library, watchlist, episodes and film dates) when the
-  last one is more than two hours old, checked every 15 minutes.
+- The quick refresh (Plex library, watchlist, episodes and film dates) every
+  hour. The server looks every 15 minutes and runs it once the last one is more
+  than an hour old.
 - The full check, including MusicBrainz, once a night in the 3 am hour, Sydney
   time.
 
