@@ -1296,9 +1296,8 @@ legend {
 /* ------------------------------------------------ compact feed rows */
 
 /* Out now and Coming soon are lists to scan, so each release is one short row:
-   a small poster, the title with its artist or episode beside it, and the tags
-   and date underneath. Roughly three times as many fit on a screen as the old
-   cards did. */
+   a poster, the title with its artist or episode beside it, and the tags and
+   date underneath. The poster is big enough to recognise at a glance. */
 #out-list,
 #upcoming-list {
   gap: 4px;
@@ -1312,22 +1311,22 @@ legend {
   margin-top: 0;
 }
 .card.feed-row {
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 14px;
   padding: 6px 10px;
   border-radius: 8px;
   box-shadow: none;
 }
 .feed-row .art {
-  width: 40px;
-  height: 40px;
-  border-radius: 4px;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
 }
 .feed-row .art-poster {
-  height: 60px;
+  height: 108px;
 }
 .feed-row .art-fallback {
-  font-size: 16px;
+  font-size: 26px;
 }
 .feed-line {
   display: flex;
@@ -1767,7 +1766,15 @@ legend {
 
 @media (max-width: 560px) {
   .card.feed-row {
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .feed-row .art {
+    width: 64px;
+    height: 64px;
+  }
+  .feed-row .art-poster {
+    height: 96px;
   }
   .feed-row .card-actions {
     justify-content: flex-start;
