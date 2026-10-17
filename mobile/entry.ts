@@ -52,6 +52,7 @@ document.addEventListener('visibilitychange', () => {
 /** What the page needs to set up and sign in to the server. */
 (window as unknown as { pmtClient: unknown }).pmtClient = {
   serverUrl: () => client.serverUrl(),
+  lanUrl: () => client.lanUrl(),
   setServer: (raw: string) => client.setServer(raw),
   setLanUrl: (url: string | null) => client.setLanUrl(url),
   hasToken: () => client.hasToken(),

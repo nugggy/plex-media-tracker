@@ -29,6 +29,9 @@ const server = createServer(async (req, res) => {
   // Checked here rather than in handleApi, since the tests reach handleApi
   // through route.ts with no headers at all.
   if (url.pathname.startsWith('/api/') || url.pathname === '/thumb') {
+    // Marks every answer as this app's, so the phone can tell it apart from
+    // something else at the same address, such as the modem's own login page.
+    res.setHeader('X-PMT-Server', '1');
     const refused = refuseRequest(req.method, req.headers, PORT, {
       signedIn: AUTH_REQUIRED,
       bearer: usesBearer(req),

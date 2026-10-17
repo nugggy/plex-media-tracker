@@ -39,6 +39,9 @@ const ACTIVE = 'server-active';
 
 const SAVED_AT = 'X-PMT-Saved-At';
 
+/** Set by the server on every API answer. See src/server.ts. */
+const SERVER_MARK = 'X-PMT-Server';
+
 /** Live progress and sign-in answers are useless an hour later, so they are never kept. */
 function cacheable(method: string, path: string): boolean {
   if (method !== 'GET') return false;
@@ -212,6 +215,9 @@ export function createClient(opts: {
           }
           continue; // Not reachable this way. Try the next address.
         }
+        // At home the public address can land on the modem's own login page,
+        // which answers but is not the server. Treat that as not reachable.
+        if (!res.headers.has(SERVER_MARK)) continue;
         if (base !== store.get(ACTIVE)) store.set(ACTIVE, base);
         opts.onStatus?.({ offline: false, savedAt: null });
         if (res.ok && cacheable(method, path)) await keep(path, res);

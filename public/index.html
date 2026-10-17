@@ -550,6 +550,22 @@
               </span>
               <small class="muted">Changing it signs this phone out, ready to sign in to the new address.</small>
             </label>
+            <label class="field" id="phone-home-field" hidden>
+              <span>Address at home</span>
+              <span class="row">
+                <input
+                  class="input"
+                  id="phone-home"
+                  type="url"
+                  inputmode="url"
+                  placeholder="http://192.168.0.162:7000"
+                  spellcheck="false"
+                  autocapitalize="off"
+                />
+                <button type="button" class="btn btn-tiny" id="phone-home-save">Save</button>
+              </span>
+              <small class="muted">Used on your home Wi-Fi when the server address does not work there.</small>
+            </label>
             <div id="session-block" hidden>
               <p class="muted small">
                 Everything signed in to this server. Sign out anything you do not recognise.
@@ -778,6 +794,19 @@
             autocapitalize="off"
             autocomplete="url"
           />
+        </label>
+        <label class="field" id="signin-home-field" hidden>
+          <span>Address at home (optional)</span>
+          <input
+            class="input"
+            id="signin-home"
+            type="url"
+            inputmode="url"
+            placeholder="http://192.168.0.162:7000"
+            spellcheck="false"
+            autocapitalize="off"
+          />
+          <small class="muted">Used on your home Wi-Fi when the address above does not work there.</small>
         </label>
         <button type="button" id="signin-btn" class="btn btn-primary">Sign in with Plex</button>
         <p id="signin-status" class="small signin-status" role="status" aria-live="polite"></p>

@@ -72,13 +72,18 @@ Plex. Approve it in the Plex window that opens. From outside the home, use
 
 ## 6. The phone
 
-Install version 2.0.0 or later of the Android app. It asks for the server
+Install version 2.0.1 or later of the Android app. It asks for the server
 address. Enter `https://yourname.duckdns.org`, press Sign in with Plex, approve
 it in the browser that opens, and come back to the app.
 
-The phone stays signed in. If the public address does not work while the phone
-is on the home Wi-Fi (some modems will not loop it back inside), the app falls
-back to the home address by itself.
+On the home Wi-Fi the public address reaches the modem's own login page instead
+of the NAS, because the modem does not loop it back inside. So fill in Address
+at home as well: `http://192.168.0.162:7000`. The app tries the public address
+first, sees it is not the server, and uses the home one. It only sends its
+sign-in there once the NAS has proved it is yours. Both can be changed later in
+Settings, then Account.
+
+The phone stays signed in.
 
 When the NAS cannot be reached at all, the app shows the lists and pictures it
 last loaded, with a note at the top saying when they were saved.

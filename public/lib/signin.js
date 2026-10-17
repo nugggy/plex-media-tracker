@@ -42,7 +42,9 @@ function showSignIn({ needServer = false, message = '' } = {}) {
   const client = phone();
   const server = client?.serverUrl() ?? '';
   $('#signin-server-field').hidden = !(client && (needServer || !server));
+  $('#signin-home-field').hidden = $('#signin-server-field').hidden;
   $('#signin-server').value = server;
+  $('#signin-home').value = client?.lanUrl() ?? '';
   $('#signin-text').textContent =
     message ||
     (client && !server
@@ -67,6 +69,8 @@ async function signIn() {
   if (client && !$('#signin-server-field').hidden) {
     try {
       client.setServer($('#signin-server').value);
+      const home = $('#signin-home').value.trim();
+      if (home) client.setLanUrl(home);
     } catch (err) {
       say(err.message, true);
       return;
@@ -74,7 +78,7 @@ async function signIn() {
     say(`Checking ${client.serverUrl()}`);
     const status = await authStatus();
     if (status.error) {
-      say(`Could not reach ${client.serverUrl()}. Check the address and that the NAS is on. (${status.error})`, true);
+      say(`Could not reach your server. Check the addresses and that the NAS is on. (${status.error})`, true);
       return;
     }
     if (status.lan_url) client.setLanUrl(status.lan_url);
@@ -174,7 +178,8 @@ export async function whenSignedIn() {
     return false;
   }
   if (status.error) return true; // Offline or broken: let the page show what it has.
-  if (client) client.setLanUrl(status.lan_url ?? null);
+  // Only learnt once signed in; a home address typed in at setup is kept.
+  if (client && status.lan_url) client.setLanUrl(status.lan_url);
   if (status.signed_in) return true;
   showSignIn();
   return false;

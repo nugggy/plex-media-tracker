@@ -70,7 +70,9 @@ async function fillAccount() {
       ? `Could not reach ${where} just now.`
       : `Connected to ${where}.`;
   $('#phone-server-field').hidden = !client;
+  $('#phone-home-field').hidden = !client;
   if (client && document.activeElement !== $('#phone-server')) $('#phone-server').value = client.serverUrl() ?? '';
+  if (client && document.activeElement !== $('#phone-home')) $('#phone-home').value = client.lanUrl() ?? '';
   $('#signout-btn').hidden = !status.account;
   $('#signout-all-btn').hidden = !status.account;
   $('#session-block').hidden = !status.account;
@@ -146,6 +148,17 @@ function wireAccount() {
       return;
     }
     void signOut(true);
+  });
+  $('#phone-home-save').addEventListener('click', () => {
+    const client = window.pmtClient;
+    if (!client) return;
+    const value = $('#phone-home').value.trim();
+    if (value && !/^https?:\/\/[^/\s]+/i.test(value)) {
+      banner('The home address should look like http://192.168.0.162:7000');
+      return;
+    }
+    client.setLanUrl(value || null);
+    banner('Saved.', 'ok');
   });
   $('#phone-server-save').addEventListener('click', () => {
     const client = window.pmtClient;

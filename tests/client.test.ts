@@ -33,7 +33,10 @@ function network(up: string[], seen: { url: string; auth: string | null }[] = []
     const url = String(input);
     seen.push({ url, auth: new Headers(init.headers).get('Authorization') });
     if (!up.some((o) => url.startsWith(o))) throw new TypeError('Failed to fetch');
-    return Response.json({ from: new URL(url).origin, path: new URL(url).pathname });
+    return Response.json(
+      { from: new URL(url).origin, path: new URL(url).pathname },
+      { headers: { 'X-PMT-Server': '1' } },
+    );
   }) as typeof fetch;
 }
 
@@ -153,9 +156,12 @@ function homeServer(holds: string | null, seen: { url: string; auth: string | nu
       if (!holds) return Response.json({ error: 'No such session.' }, { status: 404 });
       const h = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(holds))).toString('hex');
       if (url.searchParams.get('id') !== h.slice(0, 16)) return Response.json({}, { status: 404 });
-      return Response.json({ proof: await hmacHex(h, `${url.searchParams.get('nonce')}|${url.host}`) });
+      return Response.json(
+        { proof: await hmacHex(h, `${url.searchParams.get('nonce')}|${url.host}`) },
+        { headers: { 'X-PMT-Server': '1' } },
+      );
     }
-    return Response.json({ from: url.origin });
+    return Response.json({ from: url.origin }, { headers: { 'X-PMT-Server': '1' } });
   }) as typeof fetch;
 }
 
@@ -203,4 +209,19 @@ test('a change that timed out is not sent again another way', async () => {
   const r = await client.request('POST', '/api/scan/start', '{}', 'application/json');
   assert.equal(r.status, 504);
   assert.deepEqual(seen, [`${PUBLIC}/api/scan/start`]);
+});
+
+test("at home, the modem's own login page at the public address is passed over for the home address", async () => {
+  const fetchFn = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (url.origin === PUBLIC) return new Response('<h1>401 Authorization Required</h1>nginx', { status: 401 });
+    return Response.json({ from: url.origin }, { headers: { 'X-PMT-Server': '1' } });
+  }) as typeof fetch;
+  const client = createClient({
+    fetch: fetchFn,
+    store: memoryStore({ 'server-url': PUBLIC, 'server-lan-url': HOME }),
+    cache: null,
+  });
+  const r = await client.request('GET', '/api/auth/status', null, null);
+  assert.equal((await r.json()).from, HOME);
 });
